@@ -1,0 +1,11 @@
+[package]
+name = "wkfl"
+version = "0.1.0"
+description = "Tool to assist and automate my workflow"
+edition = "2021"
+publish = false
+
+[dependencies]
+clap = { version = "4.1.8", features = ["derive"] }
+env_logger = "0.10.0"
+log = "0.4.17"
