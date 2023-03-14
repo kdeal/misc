@@ -1,8 +1,12 @@
-use std::env;
+use std::{env, error::Error};
 
+use anyhow;
 use clap::{Parser, Subcommand};
 use env_logger;
+use git2::Repository;
 use log::info;
+
+mod git;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -37,16 +41,36 @@ fn setup_logging(verbose: bool) {
     log_builder.init();
 }
 
-fn main() {
+fn start_workflow(repo: Repository, name: &String, ticket: &Option<String>) -> anyhow::Result<()> {
+    let branch_name = match ticket {
+        Some(ticket_key) => format!("kdeal/{ticket_key}_{name}"),
+        None => format!("kdeal/{name}"),
+    };
+
+    if git::use_worktrees(&repo) {
+        info!("Creating worktree named '{name}' on branch '{branch_name}'");
+        git::create_worktree(&repo, name, &branch_name)
+    } else {
+        info!("Creating branch '{branch_name}' and checking it out");
+        git::switch_branch(&repo, &branch_name)
+    }?;
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     setup_logging(cli.verbose);
 
     match &cli.command {
         Commands::Start { name, ticket } => {
-            info!("'start' was used, name is: {name:?} and ticket is: {ticket:?}")
+            let repo = git::get_repository()?;
+            start_workflow(repo, name, ticket)?
         }
         Commands::End => {
-            info!("'end' was used")
+            info!("'end' was used");
         }
-    }
+    };
+
+    Ok(())
 }

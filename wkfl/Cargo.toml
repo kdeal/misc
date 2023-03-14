@@ -6,6 +6,8 @@ edition = "2021"
 publish = false
 
 [dependencies]
+anyhow = { version = "1.0.69", features = ["backtrace"] }
 clap = { version = "4.1.8", features = ["derive"] }
 env_logger = "0.10.0"
+git2 = "0.16.1"
 log = "0.4.17"
