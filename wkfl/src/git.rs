@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::{self, Context};
 
 use git2::{
@@ -10,8 +12,8 @@ pub fn get_repository() -> Result<Repository, Error> {
     Repository::open_from_env()
 }
 
-pub fn use_worktrees(repo: &Repository) -> bool {
-    repo.is_bare()
+pub fn uses_worktrees(repo: &Repository) -> bool {
+    repo.is_worktree() || repo.is_bare()
 }
 
 fn create_branch_from_default<'b>(
@@ -53,6 +55,24 @@ fn create_branch_from_default<'b>(
     })
 }
 
+pub fn determine_repo_root_dir(repo: &Repository) -> &Path {
+    if repo.is_bare() {
+        // if bare repo assume repo uses a worktree setup, so the path is
+        // the .git dir in the base of the repo
+        repo.path().parent().expect(".git dir shoud have a parent")
+    } else if repo.is_worktree() {
+        // repo_path is <base_dir>/.git/worktrees/<worktree_name>/
+        repo.path()
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .expect("worktree should be nested in .git dir twice")
+    } else {
+        repo.workdir()
+            .expect("Repo isn't bare, so it should have a workdir")
+    }
+}
+
 pub fn create_worktree(
     repo: &Repository,
     name: &String,
@@ -61,11 +81,8 @@ pub fn create_worktree(
     let new_branch = create_branch_from_default(repo, branch_name)?;
     let mut worktree_opts = WorktreeAddOptions::new();
     worktree_opts.reference(Some(new_branch.get()));
-    let mut repo_base = repo.path();
-    if repo_base.ends_with(".git/") {
-        repo_base = repo_base.parent().expect(".git dir shoud have a parent");
-    }
-    repo.worktree(name, repo_base.join(name).as_path(), Some(&worktree_opts))?;
+    let repo_root = determine_repo_root_dir(repo);
+    repo.worktree(name, repo_root.join(name).as_path(), Some(&worktree_opts))?;
     Ok(())
 }
 

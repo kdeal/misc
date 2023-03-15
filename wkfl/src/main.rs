@@ -48,7 +48,7 @@ fn start_workflow(repo: Repository, name: &String, ticket: &Option<String>) -> a
         None => format!("kdeal/{name}"),
     };
 
-    if git::use_worktrees(&repo) {
+    if git::uses_worktrees(&repo) {
         info!("Creating worktree named '{name}' on branch '{branch_name}'");
         git::create_worktree(&repo, name, &branch_name)
     } else {
