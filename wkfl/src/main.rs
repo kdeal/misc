@@ -25,6 +25,7 @@ enum Commands {
         ticket: Option<String>,
     },
     End,
+    RepoDebug,
 }
 
 fn setup_logging(verbose: bool) {
@@ -58,6 +59,14 @@ fn start_workflow(repo: Repository, name: &String, ticket: &Option<String>) -> a
     Ok(())
 }
 
+fn print_repo_debug_info(repo: Repository) {
+    info!("worktree: {}", repo.is_worktree());
+    info!("bare: {}", repo.is_bare());
+    info!("state: {:?}", repo.state());
+    info!("path: {:?}", repo.path());
+    info!("workdir: {:?}", repo.workdir());
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     setup_logging(cli.verbose);
@@ -69,6 +78,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Commands::End => {
             info!("'end' was used");
+        }
+        Commands::RepoDebug => {
+            let repo = git::get_repository()?;
+            print_repo_debug_info(repo);
         }
     };
 
