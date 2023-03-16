@@ -7,6 +7,7 @@ use git2::Repository;
 use log::info;
 
 mod git;
+mod utils;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -43,9 +44,10 @@ fn setup_logging(verbose: bool) {
 }
 
 fn start_workflow(repo: Repository, name: &String, ticket: &Option<String>) -> anyhow::Result<()> {
+    let user = utils::get_current_user().ok_or(anyhow::anyhow!("Unable to determine user"))?;
     let branch_name = match ticket {
-        Some(ticket_key) => format!("kdeal/{ticket_key}_{name}"),
-        None => format!("kdeal/{name}"),
+        Some(ticket_key) => format!("{user}/{ticket_key}_{name}"),
+        None => format!("{user}/{name}"),
     };
 
     if git::uses_worktrees(&repo) {
