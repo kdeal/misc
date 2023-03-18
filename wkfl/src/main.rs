@@ -25,7 +25,9 @@ enum Commands {
         name: String,
         ticket: Option<String>,
     },
-    End,
+    End {
+        name: Option<String>,
+    },
     RepoDebug,
 }
 
@@ -55,35 +57,49 @@ fn start_workflow(repo: Repository, name: &String, ticket: &Option<String>) -> a
         git::create_worktree(&repo, name, &branch_name)
     } else {
         info!("Creating branch '{branch_name}' and checking it out");
-        git::switch_branch(&repo, &branch_name)
+        git::switch_branch(&repo, &branch_name, true)
     }?;
 
     Ok(())
 }
 
-fn print_repo_debug_info(repo: Repository) {
+fn end_workflow(repo: Repository, name: &Option<String>) -> anyhow::Result<()> {
+    if repo.is_worktree() {
+        anyhow::bail!("For worktree based repos call stop from base of repo with name of worktree");
+    } else if repo.is_bare() {
+        let workspace_name = name.clone().ok_or(anyhow::anyhow!(
+            "Must specify a name in worktree based repo"
+        ))?;
+        git::remove_worktree(&repo, &workspace_name)?;
+    } else {
+        match name {
+            Some(branch_name) => git::remove_branch(&repo, branch_name)?,
+            None => git::remove_current_branch(&repo)?,
+        }
+    }
+    Ok(())
+}
+
+fn print_repo_debug_info(repo: Repository) -> anyhow::Result<()> {
     info!("worktree: {}", repo.is_worktree());
     info!("bare: {}", repo.is_bare());
     info!("state: {:?}", repo.state());
     info!("path: {:?}", repo.path());
     info!("workdir: {:?}", repo.workdir());
+    info!("has_changes: {}", git::has_changes(&repo)?);
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     setup_logging(cli.verbose);
 
+    let repo = git::get_repository()?;
     match &cli.command {
-        Commands::Start { name, ticket } => {
-            let repo = git::get_repository()?;
-            start_workflow(repo, name, ticket)?
-        }
-        Commands::End => {
-            info!("'end' was used");
-        }
+        Commands::Start { name, ticket } => start_workflow(repo, name, ticket)?,
+        Commands::End { name } => end_workflow(repo, name)?,
         Commands::RepoDebug => {
-            let repo = git::get_repository()?;
-            print_repo_debug_info(repo);
+            print_repo_debug_info(repo)?;
         }
     };
 

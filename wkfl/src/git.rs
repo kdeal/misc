@@ -1,10 +1,10 @@
-use std::path::Path;
+use std::{path::Path, fs};
 
-use anyhow::{self, Context};
+use anyhow::{self, bail, Context};
 
 use git2::{
     build::CheckoutBuilder, Branch, BranchType, Error, ErrorCode, Repository, RepositoryState,
-    WorktreeAddOptions,
+    WorktreeAddOptions, StatusOptions,
 };
 use log::info;
 
@@ -14,6 +14,17 @@ pub fn get_repository() -> Result<Repository, Error> {
 
 pub fn uses_worktrees(repo: &Repository) -> bool {
     repo.is_worktree() || repo.is_bare()
+}
+
+fn get_default_branch(repo: &Repository) -> anyhow::Result<String> {
+    let head_ref = repo.find_reference("refs/remotes/origin/HEAD")?;
+    let default_branch_ref = head_ref.symbolic_target().ok_or(anyhow::anyhow!(
+        "origin/HEAD doesn't point to branch, can't determine default branch"
+    ))?;
+    let default_branch_name = default_branch_ref.strip_prefix("refs/remotes/origin/").ok_or(
+    anyhow::anyhow!("origin/HEAD doesn't point to a branch in remotes_origin.")
+    )?;
+    Ok(String::from(default_branch_name))
 }
 
 fn create_branch_from_default<'b>(
@@ -86,23 +97,76 @@ pub fn create_worktree(
     Ok(())
 }
 
-pub fn switch_branch(repo: &Repository, branch_name: &String) -> anyhow::Result<()> {
+pub fn switch_branch(repo: &Repository, branch_name: &String, create: bool) -> anyhow::Result<()> {
     let repo_state = repo.state();
     if repo_state != RepositoryState::Clean {
         anyhow::bail!(
-            "Repository in {:?} state. Must be in a clean state to create new branch",
+            "Repository in {:?} state. Must be in a clean state to switch branches",
             repo_state
         )
     }
-    let new_branch = create_branch_from_default(repo, branch_name)?;
-    info!("branch name: {:?}", new_branch.name()?);
-    repo.set_head(
-        new_branch
-            .get()
-            .name()
-            .expect("Newly created branch should have a name"),
-    )?;
+    let branch = if create {
+        create_branch_from_default(repo, branch_name)?
+    } else {
+        repo.find_branch(branch_name, BranchType::Local)?
+    };
+    repo.set_head(branch.get().name().expect("Branch should have a name"))?;
     // Default is safe checkout
     repo.checkout_head(Some(&mut CheckoutBuilder::new()))?;
+    Ok(())
+}
+
+pub fn has_changes(repo: &Repository) -> anyhow::Result<bool> {
+    let mut status_options = StatusOptions::new();
+    status_options.include_ignored(false);
+    status_options.include_untracked(true);
+    Ok(repo.statuses(Some(&mut status_options))?.len() > 0)
+}
+
+pub fn remove_worktree(repo: &Repository, worktree_name: &str) -> anyhow::Result<()> {
+    let worktree = repo.find_worktree(worktree_name)?;
+    let worktree_repo = Repository::open(worktree.path())?;
+    let mut cur_branch = get_current_branch(&worktree_repo)?;
+    if has_changes(&worktree_repo)? {
+        bail!("Wortree has changes can't delete");
+    } else {
+        fs::remove_dir_all(worktree.path())?;
+    }
+    worktree.prune(None)?;
+    cur_branch.delete()?;
+    Ok(())
+}
+
+fn get_current_branch(repo: &Repository) -> anyhow::Result<Branch> {
+    if repo.head_detached().unwrap_or(false) {
+        bail!("Currently no branch, repo head is detached");
+    }
+
+    let head_ref = repo.head()?;
+    if !head_ref.is_branch() {
+        bail!("Currently no branch, repo head is {:?}", head_ref.kind());
+    }
+    let branch_name = head_ref
+        .shorthand()
+        .ok_or(anyhow::anyhow!("Branch name is not utf-8"))?;
+    let branch = repo.find_branch(branch_name, BranchType::Local)?;
+    Ok(branch)
+}
+
+pub fn remove_current_branch(repo: &Repository) -> anyhow::Result<()> {
+    let mut current_branch = get_current_branch(repo)?;
+    let default_branch = get_default_branch(repo)?;
+    info!("Switching to the  dafault branch: '{default_branch}'");
+    switch_branch(repo, &default_branch, false)?;
+    current_branch.delete()?;
+    Ok(())
+}
+
+pub fn remove_branch(repo: &Repository, branch_name: &str) -> anyhow::Result<()> {
+    let mut branch = repo.find_branch(branch_name, BranchType::Local)?;
+    if branch.is_head() {
+        return remove_current_branch(repo);
+    }
+    branch.delete()?;
     Ok(())
 }
