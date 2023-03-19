@@ -1,10 +1,10 @@
-use std::{path::Path, fs};
+use std::{fs, path::Path};
 
 use anyhow::{self, bail, Context};
 
 use git2::{
     build::CheckoutBuilder, Branch, BranchType, Error, ErrorCode, Repository, RepositoryState,
-    WorktreeAddOptions, StatusOptions,
+    StatusOptions, WorktreeAddOptions,
 };
 use log::info;
 
@@ -21,9 +21,11 @@ fn get_default_branch(repo: &Repository) -> anyhow::Result<String> {
     let default_branch_ref = head_ref.symbolic_target().ok_or(anyhow::anyhow!(
         "origin/HEAD doesn't point to branch, can't determine default branch"
     ))?;
-    let default_branch_name = default_branch_ref.strip_prefix("refs/remotes/origin/").ok_or(
-    anyhow::anyhow!("origin/HEAD doesn't point to a branch in remotes_origin.")
-    )?;
+    let default_branch_name = default_branch_ref
+        .strip_prefix("refs/remotes/origin/")
+        .ok_or(anyhow::anyhow!(
+            "origin/HEAD doesn't point to a branch in remotes_origin."
+        ))?;
     Ok(String::from(default_branch_name))
 }
 
