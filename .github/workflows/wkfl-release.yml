@@ -13,9 +13,13 @@ jobs:
     defaults:
       run:
         working-directory: wkfl
+    permissions:
+      contents: write
     steps:
     - uses: actions/checkout@v3
     - name: Build
       run: cargo build --release --verbose
     - name: Create release
       run: gh release create ${GITHUB_REF#refs/tags/} target/release/wkfl
+      env:
+        GH_TOKEN: ${{ github.token }}
