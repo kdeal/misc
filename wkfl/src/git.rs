@@ -31,7 +31,7 @@ fn get_default_branch(repo: &Repository) -> anyhow::Result<String> {
 
 fn create_branch_from_default<'b>(
     repo: &'b Repository,
-    branch_name: &String,
+    branch_name: &str,
 ) -> anyhow::Result<Branch<'b>> {
     let mut remote = repo
         .find_remote("origin")
@@ -88,8 +88,8 @@ pub fn determine_repo_root_dir(repo: &Repository) -> &Path {
 
 pub fn create_worktree(
     repo: &Repository,
-    name: &String,
-    branch_name: &String,
+    name: &str,
+    branch_name: &str,
 ) -> anyhow::Result<()> {
     let new_branch = create_branch_from_default(repo, branch_name)?;
     let mut worktree_opts = WorktreeAddOptions::new();
@@ -99,7 +99,7 @@ pub fn create_worktree(
     Ok(())
 }
 
-pub fn switch_branch(repo: &Repository, branch_name: &String, create: bool) -> anyhow::Result<()> {
+pub fn switch_branch(repo: &Repository, branch_name: &str, create: bool) -> anyhow::Result<()> {
     let repo_state = repo.state();
     if repo_state != RepositoryState::Clean {
         anyhow::bail!(
@@ -122,7 +122,7 @@ pub fn has_changes(repo: &Repository) -> anyhow::Result<bool> {
     let mut status_options = StatusOptions::new();
     status_options.include_ignored(false);
     status_options.include_untracked(true);
-    Ok(repo.statuses(Some(&mut status_options))?.len() > 0)
+    Ok(!repo.statuses(Some(&mut status_options))?.is_empty())
 }
 
 pub fn remove_worktree(repo: &Repository, worktree_name: &str) -> anyhow::Result<()> {

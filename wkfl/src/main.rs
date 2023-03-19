@@ -1,8 +1,8 @@
 use std::{env, error::Error};
 
-use anyhow;
+
 use clap::{Parser, Subcommand};
-use env_logger;
+
 use git2::Repository;
 use log::info;
 
