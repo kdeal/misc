@@ -1,6 +1,5 @@
 use std::{env, error::Error};
 
-
 use clap::{Parser, Subcommand};
 
 use git2::Repository;
