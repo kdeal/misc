@@ -1,0 +1,21 @@
+name: wkfl release
+
+on:
+  push:
+    tags: [ "wkfl/v*" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wkfl
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --release --verbose
+    - name: Create release
+      run: gh release create ${GITHUB_REF#refs/tags/} target/release/wkfl
