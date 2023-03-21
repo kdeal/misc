@@ -6,6 +6,7 @@ mod actions;
 mod config;
 mod git;
 mod utils;
+mod repositories;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -27,6 +28,7 @@ enum Commands {
         name: Option<String>,
     },
     RepoDebug,
+    Repos,
 }
 
 fn setup_logging(verbose: bool) {
@@ -47,14 +49,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     setup_logging(cli.verbose);
 
-    let _config = config::get_config()?;
-    let repo = git::get_repository()?;
+    let config = config::get_config()?;
     match &cli.command {
-        Commands::Start { name, ticket } => actions::start_workflow(repo, name, ticket)?,
-        Commands::End { name } => actions::end_workflow(repo, name)?,
+        Commands::Start { name, ticket } => {
+            let repo = git::get_repository()?;
+            actions::start_workflow(repo, name, ticket)?
+        },
+        Commands::End { name } => {
+            let repo = git::get_repository()?;
+            actions::end_workflow(repo, name)?;
+        },
         Commands::RepoDebug => {
+            let repo = git::get_repository()?;
             actions::print_repo_debug_info(repo)?;
-        }
+        },
+        Commands::Repos => actions::list_repositories(config)?,
     };
 
     Ok(())

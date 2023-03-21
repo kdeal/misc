@@ -1,8 +1,10 @@
 use git2::Repository;
 use log::info;
 
+use crate::config::Config;
 use crate::git;
 use crate::utils;
+use crate::repositories::get_repositories_in_directory;
 
 pub fn start_workflow(
     repo: Repository,
@@ -39,6 +41,16 @@ pub fn end_workflow(repo: Repository, name: &Option<String>) -> anyhow::Result<(
             Some(branch_name) => git::remove_branch(&repo, branch_name)?,
             None => git::remove_current_branch(&repo)?,
         }
+    }
+    Ok(())
+}
+
+pub fn list_repositories(config: Config) -> anyhow::Result<()> {
+    let base_repo_path = config.repositories_directory_path()?;
+    let repo_paths = get_repositories_in_directory(&base_repo_path)?;
+    for repo_path in repo_paths {
+        let relative_repo_path = repo_path.strip_prefix(&base_repo_path)?;
+        println!("{}", relative_repo_path.display())
     }
     Ok(())
 }
