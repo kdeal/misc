@@ -3,6 +3,7 @@ use std::{env, error::Error};
 use clap::{Parser, Subcommand};
 
 mod actions;
+mod config;
 mod git;
 mod utils;
 
@@ -46,6 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     setup_logging(cli.verbose);
 
+    let _config = config::get_config()?;
     let repo = git::get_repository()?;
     match &cli.command {
         Commands::Start { name, ticket } => actions::start_workflow(repo, name, ticket)?,
