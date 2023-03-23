@@ -1,12 +1,12 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
-use anyhow::{self, bail, Context};
+use anyhow::{self, bail};
 
 use git2::{
     build::CheckoutBuilder, Branch, BranchType, Error, ErrorCode, Repository, RepositoryState,
     StatusOptions, WorktreeAddOptions,
 };
-use log::info;
+use log::{info, warn};
 
 pub fn get_repository() -> Result<Repository, Error> {
     Repository::open_from_env()
@@ -33,27 +33,25 @@ fn create_branch_from_default<'b>(
     repo: &'b Repository,
     branch_name: &str,
 ) -> anyhow::Result<Branch<'b>> {
-    let mut remote = repo
-        .find_remote("origin")
-        .context("Error getting origin remote. Does 'origin' remote exist?")?;
+    let default_branch_name = get_default_branch(repo)?;
 
-    remote.connect(git2::Direction::Fetch)?;
-    let default_branch_buf = remote.default_branch()?;
-    let default_branch_full_name = default_branch_buf
-        .as_str()
-        .expect("Repo should have default branch");
-    let default_branch_name = default_branch_full_name
-        .strip_prefix("refs/heads/")
-        .expect("default branch should start with refs/heads/");
+    // Shell out to git for fetch because libgit2 doesn't take into account .ssh/config
+    info!("Fetching {} from origin...", &default_branch_name);
+    let fetch_output = Command::new("git")
+        .args(["fetch", "origin", &default_branch_name])
+        .output()?;
+    if !fetch_output.status.success() {
+        warn!(
+            "Fetching {} failed. Output: {}",
+            default_branch_name,
+            String::from_utf8_lossy(&fetch_output.stderr),
+        );
+    }
 
-    remote
-        .fetch(&[default_branch_name], None, None)
-        .context("Error when fetching default branch from origin remote")?;
-
-    let origin_banch_ref = format!("origin/{}", default_branch_name);
-    let master_branch = repo.find_branch(origin_banch_ref.as_str(), BranchType::Remote)?;
+    let origin_banch_ref = format!("origin/{}", &default_branch_name);
+    let default_branch = repo.find_branch(origin_banch_ref.as_str(), BranchType::Remote)?;
     let target = repo.find_commit(
-        master_branch
+        default_branch
             .get()
             .target()
             .expect("Branch should point to a commit"),
