@@ -1,6 +1,7 @@
 use git2::Repository;
 use log::info;
 
+use crate::Context;
 use crate::config::Config;
 use crate::git;
 use crate::utils;
@@ -10,6 +11,7 @@ pub fn start_workflow(
     repo: Repository,
     name: &String,
     ticket: &Option<String>,
+    context: &mut Context,
 ) -> anyhow::Result<()> {
     let user = utils::get_current_user().ok_or(anyhow::anyhow!("Unable to determine user"))?;
     let branch_name = match ticket {
@@ -19,11 +21,12 @@ pub fn start_workflow(
 
     if git::uses_worktrees(&repo) {
         info!("Creating worktree named '{name}' on branch '{branch_name}'");
-        git::create_worktree(&repo, name, &branch_name)
+        let worktree_path = git::create_worktree(&repo, name, &branch_name)?;
+        context.shell_actions.push(crate::shell_actions::ShellAction::Cd { path: worktree_path });
     } else {
         info!("Creating branch '{branch_name}' and checking it out");
-        git::switch_branch(&repo, &branch_name, true)
-    }?;
+        git::switch_branch(&repo, &branch_name, true)?;
+    };
 
     Ok(())
 }

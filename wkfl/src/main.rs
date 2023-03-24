@@ -1,4 +1,4 @@
-use std::{env, error::Error};
+use std::{env, error::Error, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 
@@ -7,6 +7,7 @@ mod config;
 mod git;
 mod utils;
 mod repositories;
+mod shell_actions;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -14,6 +15,8 @@ mod repositories;
 struct Cli {
     #[arg(short, long)]
     verbose: bool,
+    #[arg(long)]
+    shell_actions_file: Option<PathBuf>,
     #[command(subcommand)]
     command: Commands,
 }
@@ -29,6 +32,12 @@ enum Commands {
     },
     RepoDebug,
     Repos,
+}
+
+
+pub struct Context {
+    config: config::Config,
+    shell_actions: Vec<shell_actions::ShellAction>,
 }
 
 fn setup_logging(verbose: bool) {
@@ -49,11 +58,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     setup_logging(cli.verbose);
 
-    let config = config::get_config()?;
+    let mut context = Context { config: config::get_config()?, shell_actions: vec![] };
     match &cli.command {
         Commands::Start { name, ticket } => {
             let repo = git::get_repository()?;
-            actions::start_workflow(repo, name, ticket)?
+            actions::start_workflow(repo, name, ticket, &mut context)?
         },
         Commands::End { name } => {
             let repo = git::get_repository()?;
@@ -63,8 +72,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             let repo = git::get_repository()?;
             actions::print_repo_debug_info(repo)?;
         },
-        Commands::Repos => actions::list_repositories(config)?,
+        Commands::Repos => actions::list_repositories(context.config)?,
     };
+
+    if let Some(shell_actions_file) = cli.shell_actions_file {
+        shell_actions::write_shell_commands(&context.shell_actions, shell_actions_file)?;
+    }
 
     Ok(())
 }
