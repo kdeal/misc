@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 
+use anyhow::bail;
 use crossterm::{
     self, cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -70,20 +71,25 @@ fn determine_cursor_shape(state: &PromptState) -> cursor::SetCursorStyle {
     }
 }
 
-fn handle_key(state: &mut PromptState, key: KeyCode) -> bool {
-    match key {
-        KeyCode::Enter => {
-            return true;
+fn handle_key(
+    state: &mut PromptState,
+    key: KeyCode,
+    modifiers: KeyModifiers,
+) -> anyhow::Result<bool> {
+    match (&state.mode, key, modifiers) {
+        (_, KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+            bail!("ctrl-c sent");
         }
-        KeyCode::Esc => {
-            if state.mode != PromptMode::Normal {
+        (mode, keycode, KeyModifiers::NONE) => match (mode, keycode) {
+            (_, KeyCode::Enter) => {
+                return Ok(true);
+            }
+            (PromptMode::Insert, KeyCode::Esc) => {
                 state.mode = PromptMode::Normal;
                 state.move_left();
             }
-        }
-        KeyCode::Backspace => match state.mode {
-            PromptMode::Normal => state.move_left(),
-            PromptMode::Insert => {
+            (PromptMode::Normal, KeyCode::Backspace) => state.move_left(),
+            (PromptMode::Insert, KeyCode::Backspace) => {
                 if state.cursor < state.max_cursor() {
                     if state.cursor != 0 {
                         state.line.remove(state.cursor - 1);
@@ -93,10 +99,7 @@ fn handle_key(state: &mut PromptState, key: KeyCode) -> bool {
                     state.move_left();
                 }
             }
-        },
-        KeyCode::Char(c) => match state.mode {
-            PromptMode::Normal => handle_normal_mode_key(state, c),
-            PromptMode::Insert => {
+            (PromptMode::Insert, KeyCode::Char(c)) => {
                 if state.cursor < state.max_cursor() {
                     state.line.insert(state.cursor, c);
                 } else {
@@ -104,31 +107,29 @@ fn handle_key(state: &mut PromptState, key: KeyCode) -> bool {
                 }
                 state.move_right();
             }
+            (PromptMode::Normal, KeyCode::Char(c)) => match c {
+                'i' => state.mode = PromptMode::Insert,
+                'I' => {
+                    state.mode = PromptMode::Insert;
+                    state.move_to_start();
+                }
+                'a' => {
+                    state.mode = PromptMode::Insert;
+                    state.move_right();
+                }
+                'A' => {
+                    state.mode = PromptMode::Insert;
+                    state.move_to_end();
+                }
+                'h' => state.move_left(),
+                'l' => state.move_right(),
+                _ => {}
+            },
+            (_, _) => {}
         },
-        _ => {}
+        (_, _, _) => {}
     }
-    false
-}
-
-fn handle_normal_mode_key(state: &mut PromptState, c: char) {
-    match c {
-        'i' => state.mode = PromptMode::Insert,
-        'I' => {
-            state.mode = PromptMode::Insert;
-            state.move_to_start();
-        }
-        'a' => {
-            state.mode = PromptMode::Insert;
-            state.move_right();
-        }
-        'A' => {
-            state.mode = PromptMode::Insert;
-            state.move_to_end();
-        }
-        'h' => state.move_left(),
-        'l' => state.move_right(),
-        _ => {}
-    }
+    Ok(false)
 }
 
 fn print_prompt_input(state: &PromptState, stderr: &mut dyn Write) -> anyhow::Result<()> {
@@ -165,10 +166,7 @@ pub fn basic_prompt(prompt: &str) -> anyhow::Result<String> {
         code, modifiers, ..
     }) = event::read()?
     {
-        if modifiers == KeyModifiers::CONTROL && code == KeyCode::Char('c') {
-            break;
-        }
-        if handle_key(&mut state, code) {
+        if handle_key(&mut state, code, modifiers)? {
             break;
         }
 
@@ -219,19 +217,22 @@ impl SelectionState {
     }
 }
 
-fn select_handle_key(state: &mut SelectionState, key: KeyCode) -> bool {
-    match (&state.prompt_state.mode, key) {
-        (PromptMode::Normal, KeyCode::Char('j')) => state.next_item(),
-        (PromptMode::Normal, KeyCode::Char('k')) => state.previous_item(),
-        (_, _) => return handle_key(&mut state.prompt_state, key),
+fn select_handle_key(
+    state: &mut SelectionState,
+    key: KeyCode,
+    modifiers: KeyModifiers,
+) -> anyhow::Result<bool> {
+    match (&state.prompt_state.mode, key, modifiers) {
+        (PromptMode::Normal, KeyCode::Char('j'), KeyModifiers::NONE) => state.next_item(),
+        (PromptMode::Normal, KeyCode::Char('k'), KeyModifiers::NONE) => state.previous_item(),
+        (_, _, _) => return handle_key(&mut state.prompt_state, key, modifiers),
     };
-    false
+    Ok(false)
 }
 
 fn print_options(
     state: &SelectionState,
-    #[allow(clippy::ptr_arg)]
-    options: &Vec<&String>,
+    #[allow(clippy::ptr_arg)] options: &Vec<&String>,
     stderr: &mut dyn Write,
 ) -> anyhow::Result<()> {
     stderr.queue(Clear(ClearType::FromCursorDown))?;
@@ -290,10 +291,7 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a Vec<String>) -> anyhow::Resu
         code, modifiers, ..
     }) = event::read()?
     {
-        if modifiers == KeyModifiers::CONTROL && code == KeyCode::Char('c') {
-            break;
-        }
-        if select_handle_key(&mut state, code) {
+        if select_handle_key(&mut state, code, modifiers)? {
             break;
         }
 
