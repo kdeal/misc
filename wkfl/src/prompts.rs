@@ -78,11 +78,8 @@ fn handle_key(state: &mut PromptState, key: KeyCode) -> bool {
                         state.line.remove(state.cursor - 1);
                         state.move_left();
                     }
-                } else {
-                    match state.line.pop() {
-                        Some(_) => state.move_left(),
-                        None => {}
-                    }
+                } else if state.line.pop().is_some() {
+                    state.move_left();
                 }
             }
         },
@@ -99,7 +96,7 @@ fn handle_key(state: &mut PromptState, key: KeyCode) -> bool {
         },
         _ => {}
     }
-    return false;
+    false
 }
 
 fn handle_normal_mode_key(state: &mut PromptState, c: char) {
@@ -162,7 +159,7 @@ pub fn basic_prompt(prompt: &str) -> anyhow::Result<String> {
             .flush()?;
     }
     disable_raw_mode()?;
-    eprintln!("");
+    eprintln!();
 
     Ok(state.line)
 }

@@ -7,12 +7,12 @@ fn is_dir_a_repo(directory: &Path) -> bool {
     directory.join(".git").as_path().exists()
 }
 
-fn check_read_dir_entry<'p>(dir_entry_result: io::Result<fs::DirEntry>) -> Option<PathBuf> {
+fn check_read_dir_entry(dir_entry_result: io::Result<fs::DirEntry>) -> Option<PathBuf> {
     let entry = dir_entry_result.ok()?;
     let entry_path = entry.path();
 
     if let Some(file_name) = entry_path.file_name() {
-        if file_name.to_string_lossy().starts_with(".") {
+        if file_name.to_string_lossy().starts_with('.') {
             return None;
         }
     }
@@ -20,7 +20,7 @@ fn check_read_dir_entry<'p>(dir_entry_result: io::Result<fs::DirEntry>) -> Optio
     let mut file_type = entry.file_type().ok()?;
     if file_type.is_symlink() {
         let symlink_path = fs::read_link(&entry_path).unwrap();
-        let file_metadata = fs::symlink_metadata(&symlink_path).ok()?;
+        let file_metadata = fs::symlink_metadata(symlink_path).ok()?;
         file_type = file_metadata.file_type();
     }
 
