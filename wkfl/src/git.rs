@@ -142,6 +142,12 @@ pub fn remove_worktree(repo: &Repository, worktree_name: &str) -> anyhow::Result
     Ok(())
 }
 
+pub fn on_default_branch(repo: &Repository) -> anyhow::Result<bool> {
+    let current_branch = get_current_branch(repo)?;
+    let default_branch = get_default_branch(repo)?;
+    Ok(current_branch.name()?.unwrap_or("") == default_branch)
+}
+
 fn get_current_branch(repo: &Repository) -> anyhow::Result<Branch> {
     if repo.head_detached().unwrap_or(false) {
         bail!("Currently no branch, repo head is detached");

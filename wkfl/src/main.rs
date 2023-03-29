@@ -24,13 +24,8 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    Start {
-        name: String,
-        ticket: Option<String>,
-    },
-    End {
-        name: Option<String>,
-    },
+    Start,
+    End,
     RepoDebug,
     Repos,
     Repo,
@@ -64,13 +59,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         shell_actions: vec![],
     };
     match &cli.command {
-        Commands::Start { name, ticket } => {
+        Commands::Start => {
             let repo = git::get_repository()?;
-            actions::start_workflow(repo, name, ticket, &mut context)?
+            let name = prompts::basic_prompt("Name:")?;
+            let ticket_str = prompts::basic_prompt("Ticket:")?;
+            let ticket = if ticket_str.is_empty() {
+                None
+            } else {
+                Some(ticket_str)
+            };
+            actions::start_workflow(repo, &name, &ticket, &mut context)?
         }
-        Commands::End { name } => {
+        Commands::End => {
             let repo = git::get_repository()?;
-            actions::end_workflow(repo, name)?;
+            actions::end_workflow(repo)?;
         }
         Commands::RepoDebug => {
             let repo = git::get_repository()?;

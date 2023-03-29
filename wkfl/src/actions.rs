@@ -36,19 +36,17 @@ pub fn start_workflow(
     Ok(())
 }
 
-pub fn end_workflow(repo: Repository, name: &Option<String>) -> anyhow::Result<()> {
+pub fn end_workflow(repo: Repository) -> anyhow::Result<()> {
     if repo.is_worktree() {
         anyhow::bail!("For worktree based repos call stop from base of repo with name of worktree");
     } else if repo.is_bare() {
-        let workspace_name = name.clone().ok_or(anyhow::anyhow!(
-            "Must specify a name in worktree based repo"
-        ))?;
+        let workspace_name = basic_prompt("Workspace Name:")?;
         git::remove_worktree(&repo, &workspace_name)?;
+    } else if git::on_default_branch(&repo)? {
+        let branch_name = basic_prompt("Branch Name:")?;
+        git::remove_branch(&repo, &branch_name)?;
     } else {
-        match name {
-            Some(branch_name) => git::remove_branch(&repo, branch_name)?,
-            None => git::remove_current_branch(&repo)?,
-        }
+        git::remove_current_branch(&repo)?;
     }
     Ok(())
 }
