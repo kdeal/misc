@@ -1,4 +1,8 @@
-use std::{fs::File, io::{Write, BufWriter}, path::PathBuf};
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+    path::PathBuf,
+};
 
 pub enum ShellAction {
     Cd { path: PathBuf },

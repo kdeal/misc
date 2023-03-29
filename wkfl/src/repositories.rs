@@ -1,4 +1,7 @@
-use std::{fs, io, path::{Path, PathBuf}};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 fn is_dir_a_repo(directory: &Path) -> bool {
     directory.join(".git").as_path().exists()
@@ -10,7 +13,7 @@ fn check_read_dir_entry<'p>(dir_entry_result: io::Result<fs::DirEntry>) -> Optio
 
     if let Some(file_name) = entry_path.file_name() {
         if file_name.to_string_lossy().starts_with(".") {
-            return None
+            return None;
         }
     }
 
@@ -46,8 +49,9 @@ pub fn get_repositories_in_directory(directory: &Path) -> anyhow::Result<Vec<Pat
             .pop()
             .expect("While loop ensures there is something to pop");
         if !current_dir.exists() {
-            continue
-        } if is_dir_a_repo(&current_dir) {
+            continue;
+        }
+        if is_dir_a_repo(&current_dir) {
             repositories.push(current_dir);
         } else {
             let mut sub_directories = get_sub_directories(&current_dir)?;

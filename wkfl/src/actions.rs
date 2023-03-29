@@ -23,7 +23,11 @@ pub fn start_workflow(
     if git::uses_worktrees(&repo) {
         info!("Creating worktree named '{name}' on branch '{branch_name}'");
         let worktree_path = git::create_worktree(&repo, name, &branch_name)?;
-        context.shell_actions.push(crate::shell_actions::ShellAction::Cd { path: worktree_path });
+        context
+            .shell_actions
+            .push(crate::shell_actions::ShellAction::Cd {
+                path: worktree_path,
+            });
     } else {
         info!("Creating branch '{branch_name}' and checking it out");
         git::switch_branch(&repo, &branch_name, true)?;

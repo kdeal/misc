@@ -59,20 +59,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     setup_logging(cli.verbose);
 
-    let mut context = Context { config: config::get_config()?, shell_actions: vec![] };
+    let mut context = Context {
+        config: config::get_config()?,
+        shell_actions: vec![],
+    };
     match &cli.command {
         Commands::Start { name, ticket } => {
             let repo = git::get_repository()?;
             actions::start_workflow(repo, name, ticket, &mut context)?
-        },
+        }
         Commands::End { name } => {
             let repo = git::get_repository()?;
             actions::end_workflow(repo, name)?;
-        },
+        }
         Commands::RepoDebug => {
             let repo = git::get_repository()?;
             actions::print_repo_debug_info(repo)?;
-        },
+        }
         Commands::Repos => actions::list_repositories(context.config)?,
         Commands::Repo => actions::switch_repo(&mut context)?,
     };

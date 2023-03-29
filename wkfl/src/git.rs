@@ -1,4 +1,8 @@
-use std::{fs, path::{Path, PathBuf}, process::Command};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::{self, bail};
 
@@ -84,7 +88,11 @@ pub fn determine_repo_root_dir(repo: &Repository) -> &Path {
     }
 }
 
-pub fn create_worktree(repo: &Repository, name: &str, branch_name: &str) -> anyhow::Result<PathBuf> {
+pub fn create_worktree(
+    repo: &Repository,
+    name: &str,
+    branch_name: &str,
+) -> anyhow::Result<PathBuf> {
     let new_branch = create_branch_from_default(repo, branch_name)?;
     let mut worktree_opts = WorktreeAddOptions::new();
     worktree_opts.reference(Some(new_branch.get()));
