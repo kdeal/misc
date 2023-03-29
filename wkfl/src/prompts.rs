@@ -3,8 +3,8 @@ use std::io::{self, Write};
 use crossterm::{
     self, cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    style::Print,
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    style::{self, Color},
+    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, ScrollUp},
     ExecutableCommand, QueueableCommand,
 };
 
@@ -16,14 +16,18 @@ enum PromptMode {
 
 struct PromptState {
     cursor: usize,
+    input_start: u16,
+    input_row: u16,
     line: String,
     mode: PromptMode,
 }
 
 impl PromptState {
-    fn new() -> Self {
+    fn new(input_start: u16, input_row: u16) -> Self {
         PromptState {
             cursor: 0,
+            input_start,
+            input_row,
             line: String::new(),
             mode: PromptMode::Insert,
         }
@@ -56,6 +60,13 @@ impl PromptState {
         if self.cursor < max_cursor {
             self.cursor += 1
         }
+    }
+}
+
+fn determine_cursor_shape(state: &PromptState) -> cursor::SetCursorStyle {
+    match state.mode {
+        PromptMode::Normal => cursor::SetCursorStyle::SteadyBlock,
+        PromptMode::Insert => cursor::SetCursorStyle::SteadyBar,
     }
 }
 
@@ -120,13 +131,32 @@ fn handle_normal_mode_key(state: &mut PromptState, c: char) {
     }
 }
 
+fn print_prompt_input(state: &PromptState, stderr: &mut dyn Write) -> anyhow::Result<()> {
+    stderr
+        .queue(cursor::MoveTo(state.input_start, state.input_row))?
+        .queue(Clear(ClearType::UntilNewLine))?
+        .queue(style::Print(&state.line))?;
+    Ok(())
+}
+
+fn update_cursor(state: &PromptState, stderr: &mut dyn Write) -> anyhow::Result<()> {
+    stderr
+        .queue(cursor::MoveTo(
+            state.input_start + u16::try_from(state.cursor)?,
+            state.input_row,
+        ))?
+        .queue(determine_cursor_shape(state))?;
+    Ok(())
+}
+
 pub fn basic_prompt(prompt: &str) -> anyhow::Result<String> {
     let mut stderr = io::stderr();
     eprint!("{} ", prompt);
     stderr.flush()?;
 
-    let mut state = PromptState::new();
     let input_start = u16::try_from(prompt.len() + 1)?;
+    let (_, input_row) = cursor::position()?;
+    let mut state = PromptState::new(input_start, input_row);
 
     enable_raw_mode()?;
     stderr.execute(cursor::SetCursorStyle::SteadyBar)?;
@@ -142,24 +172,152 @@ pub fn basic_prompt(prompt: &str) -> anyhow::Result<String> {
             break;
         }
 
-        let (_, position_row) = cursor::position()?;
-        let cursor_shape = match state.mode {
-            PromptMode::Normal => cursor::SetCursorStyle::SteadyBlock,
-            PromptMode::Insert => cursor::SetCursorStyle::SteadyBar,
-        };
-        stderr
-            .queue(cursor::MoveTo(input_start, position_row))?
-            .queue(Clear(ClearType::UntilNewLine))?
-            .queue(Print(&state.line))?
-            .queue(cursor::MoveTo(
-                input_start + u16::try_from(state.cursor)?,
-                position_row,
-            ))?
-            .queue(cursor_shape)?
-            .flush()?;
+        print_prompt_input(&state, &mut stderr)?;
+        update_cursor(&state, &mut stderr)?;
+        stderr.flush()?;
     }
     disable_raw_mode()?;
     eprintln!();
 
     Ok(state.line)
+}
+
+struct SelectionState {
+    selected: u16,
+    num_items: u16,
+    max_index: u16,
+    prompt_state: PromptState,
+}
+
+impl SelectionState {
+    fn new(num_items: u16, input_start: u16, input_row: u16) -> Self {
+        SelectionState {
+            selected: 0,
+            num_items,
+            max_index: num_items - 1,
+            prompt_state: PromptState::new(input_start, input_row),
+        }
+    }
+
+    fn update_max_index(&mut self, max_index: u16) {
+        self.max_index = max_index;
+        if self.selected > self.max_index {
+            self.selected = self.max_index
+        }
+    }
+
+    fn next_item(&mut self) {
+        if self.selected < self.max_index {
+            self.selected += 1
+        }
+    }
+
+    fn previous_item(&mut self) {
+        if self.selected > 0 {
+            self.selected -= 1
+        }
+    }
+}
+
+fn select_handle_key(state: &mut SelectionState, key: KeyCode) -> bool {
+    match (&state.prompt_state.mode, key) {
+        (PromptMode::Normal, KeyCode::Char('j')) => state.next_item(),
+        (PromptMode::Normal, KeyCode::Char('k')) => state.previous_item(),
+        (_, _) => return handle_key(&mut state.prompt_state, key),
+    };
+    false
+}
+
+fn print_options(
+    state: &SelectionState,
+    #[allow(clippy::ptr_arg)]
+    options: &Vec<&String>,
+    stderr: &mut dyn Write,
+) -> anyhow::Result<()> {
+    stderr.queue(Clear(ClearType::FromCursorDown))?;
+    let selected_usize = usize::from(state.selected);
+    for (i, option) in options.iter().enumerate() {
+        if i == selected_usize {
+            stderr
+                .queue(style::SetForegroundColor(Color::DarkCyan))?
+                .queue(style::Print("> "))?
+                .queue(style::SetAttribute(style::Attribute::Bold))?;
+        } else {
+            stderr
+                .queue(style::Print("  "))?
+                .queue(style::SetForegroundColor(Color::Reset))?
+                .queue(style::SetAttribute(style::Attribute::Reset))?;
+        }
+        stderr.queue(style::Print(&option))?;
+        if i < 10 {
+            stderr.queue(cursor::MoveToNextLine(1))?;
+        }
+    }
+    stderr
+        .queue(style::SetForegroundColor(Color::Reset))?
+        .queue(style::SetAttribute(style::Attribute::Reset))?;
+    Ok(())
+}
+
+fn filter_options<'a>(filter: &str, options: &'a [String]) -> Vec<&'a String> {
+    options
+        .iter()
+        .filter(|option| option.contains(filter))
+        .collect()
+}
+
+pub fn select_prompt<'a>(prompt: &str, options: &'a Vec<String>) -> anyhow::Result<&'a str> {
+    let mut stderr = io::stderr();
+    eprint!("{} ", prompt);
+    stderr.flush()?;
+
+    let num_items = 10.min(options.len());
+    let input_start = u16::try_from(prompt.len() + 1)?;
+    let mut state = SelectionState::new(u16::try_from(num_items)?, input_start, 0);
+
+    enable_raw_mode()?;
+    stderr
+        .queue(ScrollUp(state.num_items))?
+        .queue(cursor::MoveToPreviousLine(state.num_items - 1))?;
+    let (_, position_row) = cursor::position()?;
+    print_options(&state, &options.iter().collect(), &mut stderr)?;
+    // We shifted the input row, so we need to update it
+    state.prompt_state.input_row = position_row - 1;
+    update_cursor(&state.prompt_state, &mut stderr)?;
+    stderr.flush()?;
+
+    while let Event::Key(KeyEvent {
+        code, modifiers, ..
+    }) = event::read()?
+    {
+        if modifiers == KeyModifiers::CONTROL && code == KeyCode::Char('c') {
+            break;
+        }
+        if select_handle_key(&mut state, code) {
+            break;
+        }
+
+        let filtered_options = filter_options(&state.prompt_state.line, options);
+        let new_num_items = state
+            .num_items
+            .min(u16::try_from(filtered_options.len()).unwrap_or(state.num_items));
+        state.update_max_index(if new_num_items > 0 {
+            new_num_items - 1
+        } else {
+            0
+        });
+
+        print_prompt_input(&state.prompt_state, &mut stderr)?;
+        stderr.queue(cursor::MoveToNextLine(1))?;
+        print_options(&state, &filtered_options, &mut stderr)?;
+        update_cursor(&state.prompt_state, &mut stderr)?;
+        stderr.flush()?;
+    }
+    stderr
+        .queue(cursor::MoveToNextLine(1))?
+        .queue(Clear(ClearType::FromCursorDown))?
+        .flush()?;
+    disable_raw_mode()?;
+
+    Ok(&options[usize::from(state.selected)])
 }
