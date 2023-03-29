@@ -5,9 +5,10 @@ use clap::{Parser, Subcommand};
 mod actions;
 mod config;
 mod git;
-mod utils;
+mod prompts;
 mod repositories;
 mod shell_actions;
+mod utils;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -32,8 +33,8 @@ enum Commands {
     },
     RepoDebug,
     Repos,
+    Repo,
 }
-
 
 pub struct Context {
     config: config::Config,
@@ -73,6 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             actions::print_repo_debug_info(repo)?;
         },
         Commands::Repos => actions::list_repositories(context.config)?,
+        Commands::Repo => actions::switch_repo(&mut context)?,
     };
 
     if let Some(shell_actions_file) = cli.shell_actions_file {

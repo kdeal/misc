@@ -1,11 +1,12 @@
 use git2::Repository;
-use log::info;
+use log::{info, warn};
 
-use crate::Context;
 use crate::config::Config;
 use crate::git;
-use crate::utils;
+use crate::prompts::basic_prompt;
 use crate::repositories::get_repositories_in_directory;
+use crate::utils;
+use crate::Context;
 
 pub fn start_workflow(
     repo: Repository,
@@ -54,6 +55,22 @@ pub fn list_repositories(config: Config) -> anyhow::Result<()> {
     for repo_path in repo_paths {
         let relative_repo_path = repo_path.strip_prefix(&base_repo_path)?;
         println!("{}", relative_repo_path.display())
+    }
+    Ok(())
+}
+
+pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
+    let repo_name = basic_prompt("Repo name:")?;
+    let base_repo_path = context.config.repositories_directory_path()?;
+    let repo_paths = get_repositories_in_directory(&base_repo_path)?;
+    let repo_match = repo_paths
+        .into_iter()
+        .find(|repo_path| repo_path.ends_with(&repo_name));
+    match repo_match {
+        Some(repo_path) => context
+            .shell_actions
+            .push(crate::shell_actions::ShellAction::Cd { path: repo_path }),
+        None => warn!("Unable to find repo named: {}", repo_name),
     }
     Ok(())
 }
