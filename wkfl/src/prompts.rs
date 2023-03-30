@@ -194,6 +194,11 @@ impl PromptState {
         self.line.remove(self.cursor);
     }
 
+    fn delete_all(&mut self) {
+        self.line = String::new();
+        self.cursor = 0;
+    }
+
     fn insert_char(&mut self , c: char) {
         if self.cursor < self.max_cursor() {
             self.line.insert(self.cursor, c);
@@ -256,6 +261,11 @@ fn handle_key(
                     state.insert_mode();
                     state.move_to_end();
                 }
+                'x' => state.delete_current_char(),
+                'X' => {
+                    state.move_left();
+                    state.delete_current_char();
+                }
                 'h' => state.move_left(),
                 'l' => state.move_right(),
                 'c' => state.operator_pending_mode(Operation::Change(OpAdjust::NONE)),
@@ -304,6 +314,14 @@ fn handle_key(
                 (Operation::Delete(OpAdjust::NONE), 'b') => {
                     let start = state.get_current_word_start();
                     state.delete_range(start, state.cursor);
+                    state.normal_mode();
+                }
+                (Operation::Change(OpAdjust::NONE), 'c') => {
+                    state.delete_all();
+                    state.insert_mode();
+                },
+                (Operation::Delete(OpAdjust::NONE), 'd') => {
+                    state.delete_all();
                     state.normal_mode();
                 }
                 (_, _) => state.normal_mode(),
