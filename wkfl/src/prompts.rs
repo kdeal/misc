@@ -56,6 +56,18 @@ impl PromptState {
         }
     }
 
+    fn insert_mode(&mut self) {
+        self.mode = PromptMode::Insert
+    }
+
+    fn normal_mode(&mut self) {
+        self.mode = PromptMode::Normal
+    }
+
+    fn operator_pending_mode(&mut self, op: Operation) {
+        self.mode = PromptMode::OperatorPending(op)
+    }
+
     fn move_to_start(&mut self) {
         self.cursor = 0
     }
@@ -177,6 +189,18 @@ impl PromptState {
         self.line.replace_range(start..end, "");
         self.cursor = start;
     }
+
+    fn delete_current_char(&mut self) {
+        self.line.remove(self.cursor);
+    }
+
+    fn insert_char(&mut self , c: char) {
+        if self.cursor < self.max_cursor() {
+            self.line.insert(self.cursor, c);
+        } else {
+            self.line.push(c);
+        }
+    }
 }
 
 fn determine_cursor_shape(state: &PromptState) -> cursor::SetCursorStyle {
@@ -200,46 +224,42 @@ fn handle_key(
                 return Ok(true);
             }
             (PromptMode::Insert, KeyCode::Esc) => {
-                state.mode = PromptMode::Normal;
+                state.normal_mode();
                 state.move_left();
             }
             (PromptMode::Normal, KeyCode::Backspace) => state.move_left(),
             (PromptMode::Insert, KeyCode::Backspace) => {
                 if state.cursor < state.max_cursor() {
                     if state.cursor != 0 {
-                        state.line.remove(state.cursor - 1);
                         state.move_left();
+                        state.delete_current_char()
                     }
                 } else if state.line.pop().is_some() {
                     state.move_left();
                 }
             }
             (PromptMode::Insert, KeyCode::Char(c)) => {
-                if state.cursor < state.max_cursor() {
-                    state.line.insert(state.cursor, c);
-                } else {
-                    state.line.push(c);
-                }
+                state.insert_char(c);
                 state.move_right();
             }
             (PromptMode::Normal, KeyCode::Char(c)) => match c {
-                'i' => state.mode = PromptMode::Insert,
+                'i' => state.insert_mode(),
                 'I' => {
-                    state.mode = PromptMode::Insert;
+                    state.insert_mode();
                     state.move_to_start();
                 }
                 'a' => {
-                    state.mode = PromptMode::Insert;
+                    state.insert_mode();
                     state.move_right();
                 }
                 'A' => {
-                    state.mode = PromptMode::Insert;
+                    state.insert_mode();
                     state.move_to_end();
                 }
                 'h' => state.move_left(),
                 'l' => state.move_right(),
-                'c' => state.mode = PromptMode::OperatorPending(Operation::Change(OpAdjust::NONE)),
-                'd' => state.mode = PromptMode::OperatorPending(Operation::Delete(OpAdjust::NONE)),
+                'c' => state.operator_pending_mode(Operation::Change(OpAdjust::NONE)),
+                'd' => state.operator_pending_mode(Operation::Delete(OpAdjust::NONE)),
                 'e' => state.move_to_current_word_end(),
                 'b' => state.move_to_current_word_start(),
                 'w' => state.move_to_next_word_start(),
@@ -247,46 +267,46 @@ fn handle_key(
             },
             (PromptMode::OperatorPending(operation), KeyCode::Char(c)) => match (operation, c) {
                 (Operation::Change(OpAdjust::NONE), 'i') => {
-                    state.mode = PromptMode::OperatorPending(Operation::Change(OpAdjust::Inner))
+                    state.operator_pending_mode(Operation::Change(OpAdjust::Inner))
                 }
                 (Operation::Change(OpAdjust::NONE), 'a') => {
-                    state.mode = PromptMode::OperatorPending(Operation::Change(OpAdjust::Around))
+                    state.operator_pending_mode(Operation::Change(OpAdjust::Around))
                 }
                 (Operation::Delete(OpAdjust::NONE), 'i') => {
-                    state.mode = PromptMode::OperatorPending(Operation::Delete(OpAdjust::Inner))
+                    state.operator_pending_mode(Operation::Delete(OpAdjust::Inner))
                 }
                 (Operation::Delete(OpAdjust::NONE), 'a') => {
-                    state.mode = PromptMode::OperatorPending(Operation::Delete(OpAdjust::Around))
+                    state.operator_pending_mode(Operation::Delete(OpAdjust::Around));
                 }
                 (Operation::Change(adjustment), 'w') => {
                     state.delete_word(adjustment.clone());
-                    state.mode = PromptMode::Insert;
+                    state.insert_mode();
                 }
                 (Operation::Delete(adjustment), 'w') => {
                     state.delete_word(adjustment.clone());
-                    state.mode = PromptMode::Normal;
+                    state.normal_mode();
                 }
                 (Operation::Change(OpAdjust::NONE), 'e') => {
                     let end = state.get_current_word_end();
                     state.delete_range(state.cursor, end + 1);
-                    state.mode = PromptMode::Insert;
+                    state.insert_mode();
                 },
                 (Operation::Delete(OpAdjust::NONE), 'e') => {
                     let end = state.get_current_word_end();
                     state.delete_range(state.cursor, end + 1);
-                    state.mode = PromptMode::Normal;
+                    state.normal_mode();
                 }
                 (Operation::Change(OpAdjust::NONE), 'b') => {
                     let start = state.get_current_word_start();
                     state.delete_range(start, state.cursor);
-                    state.mode = PromptMode::Insert;
+                    state.insert_mode();
                 },
                 (Operation::Delete(OpAdjust::NONE), 'b') => {
                     let start = state.get_current_word_start();
                     state.delete_range(start, state.cursor);
-                    state.mode = PromptMode::Normal;
+                    state.normal_mode();
                 }
-                (_, _) => state.mode = PromptMode::Normal,
+                (_, _) => state.normal_mode(),
             },
             (_, _) => {}
         },
