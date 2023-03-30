@@ -62,6 +62,82 @@ impl PromptState {
             self.cursor += 1
         }
     }
+
+    fn move_to_current_word_end(&mut self) {
+        if self.cursor < self.max_cursor() {
+            self.cursor = self.get_current_word_end();
+        }
+    }
+
+    fn move_to_current_word_start(&mut self) {
+        if self.cursor > 0 {
+            self.cursor = self.get_current_word_start();
+        }
+    }
+
+    fn move_to_next_word_start(&mut self) {
+        if self.cursor < self.max_cursor() {
+            self.cursor = self.get_next_word_start();
+        }
+    }
+
+    fn get_current_word_end(&self) -> usize {
+        fn predicate(item: &(usize, char)) -> bool {
+            !item.1.is_alphanumeric()
+        }
+        let item = self
+            .line
+            .char_indices()
+            .skip(self.cursor + 1)
+            // Get into a word
+            .skip_while(predicate)
+            // Find when we are back out of the word
+            .find(predicate);
+        if let Some((index, _)) = item {
+            index - 1
+        } else {
+            self.line.len() - 1
+        }
+    }
+
+    fn get_current_word_start(&self) -> usize {
+        fn predicate(item: &(usize, char)) -> bool {
+            !item.1.is_alphanumeric()
+        }
+        let item = self
+            .line
+            .char_indices()
+            .rev()
+            .skip(self.line.len() - self.cursor)
+            // Get into a word
+            .skip_while(predicate)
+            // Find when we are back out of the word
+            .find(predicate);
+        if let Some((index, _)) = item {
+            index + 1
+        } else {
+            0
+        }
+    }
+
+    fn get_next_word_start(&self) -> usize {
+        fn predicate(item: &(usize, char)) -> bool {
+            item.1.is_alphanumeric()
+        }
+        let item = self
+            .line
+            .char_indices()
+            .skip(self.cursor)
+            // Get out of a word
+            .skip_while(predicate)
+            // Find when we are back in a word
+            .find(predicate);
+        if let Some((index, _)) = item {
+            index
+        } else {
+            self.line.len() - 1
+        }
+    }
 }
 
 fn determine_cursor_shape(state: &PromptState) -> cursor::SetCursorStyle {
@@ -123,6 +199,9 @@ fn handle_key(
                 }
                 'h' => state.move_left(),
                 'l' => state.move_right(),
+                'e' => state.move_to_current_word_end(),
+                'b' => state.move_to_current_word_start(),
+                'w' => state.move_to_next_word_start(),
                 _ => {}
             },
             (_, _) => {}
@@ -225,6 +304,8 @@ fn select_handle_key(
     match (&state.prompt_state.mode, key, modifiers) {
         (PromptMode::Normal, KeyCode::Char('j'), KeyModifiers::NONE) => state.next_item(),
         (PromptMode::Normal, KeyCode::Char('k'), KeyModifiers::NONE) => state.previous_item(),
+        (PromptMode::Insert, KeyCode::Char('n'), KeyModifiers::CONTROL) => state.next_item(),
+        (PromptMode::Insert, KeyCode::Char('p'), KeyModifiers::CONTROL) => state.previous_item(),
         (_, _, _) => return handle_key(&mut state.prompt_state, key, modifiers),
     };
     Ok(false)
