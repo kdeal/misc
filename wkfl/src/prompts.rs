@@ -12,7 +12,7 @@ use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum OpAdjust {
-    NONE,
+    Empty,
     Around,
     Inner,
 }
@@ -167,7 +167,7 @@ impl PromptState {
     }
 
     fn delete_word(&mut self, adjustment: OpAdjust) {
-        let start = if adjustment == OpAdjust::NONE {
+        let start = if adjustment == OpAdjust::Empty {
             self.cursor
         } else {
             self.get_current_word_start()
@@ -269,24 +269,24 @@ fn handle_key(
                 }
                 'h' => state.move_left(),
                 'l' => state.move_right(),
-                'c' => state.operator_pending_mode(Operation::Change(OpAdjust::NONE)),
-                'd' => state.operator_pending_mode(Operation::Delete(OpAdjust::NONE)),
+                'c' => state.operator_pending_mode(Operation::Change(OpAdjust::Empty)),
+                'd' => state.operator_pending_mode(Operation::Delete(OpAdjust::Empty)),
                 'e' => state.move_to_current_word_end(),
                 'b' => state.move_to_current_word_start(),
                 'w' => state.move_to_next_word_start(),
                 _ => {}
             },
             (PromptMode::OperatorPending(operation), KeyCode::Char(c)) => match (operation, c) {
-                (Operation::Change(OpAdjust::NONE), 'i') => {
+                (Operation::Change(OpAdjust::Empty), 'i') => {
                     state.operator_pending_mode(Operation::Change(OpAdjust::Inner))
                 }
-                (Operation::Change(OpAdjust::NONE), 'a') => {
+                (Operation::Change(OpAdjust::Empty), 'a') => {
                     state.operator_pending_mode(Operation::Change(OpAdjust::Around))
                 }
-                (Operation::Delete(OpAdjust::NONE), 'i') => {
+                (Operation::Delete(OpAdjust::Empty), 'i') => {
                     state.operator_pending_mode(Operation::Delete(OpAdjust::Inner))
                 }
-                (Operation::Delete(OpAdjust::NONE), 'a') => {
+                (Operation::Delete(OpAdjust::Empty), 'a') => {
                     state.operator_pending_mode(Operation::Delete(OpAdjust::Around));
                 }
                 (Operation::Change(adjustment), 'w') => {
@@ -297,31 +297,31 @@ fn handle_key(
                     state.delete_word(adjustment.clone());
                     state.normal_mode();
                 }
-                (Operation::Change(OpAdjust::NONE), 'e') => {
+                (Operation::Change(OpAdjust::Empty), 'e') => {
                     let end = state.get_current_word_end();
                     state.delete_range(state.cursor, end + 1);
                     state.insert_mode();
                 }
-                (Operation::Delete(OpAdjust::NONE), 'e') => {
+                (Operation::Delete(OpAdjust::Empty), 'e') => {
                     let end = state.get_current_word_end();
                     state.delete_range(state.cursor, end + 1);
                     state.normal_mode();
                 }
-                (Operation::Change(OpAdjust::NONE), 'b') => {
+                (Operation::Change(OpAdjust::Empty), 'b') => {
                     let start = state.get_current_word_start();
                     state.delete_range(start, state.cursor);
                     state.insert_mode();
                 }
-                (Operation::Delete(OpAdjust::NONE), 'b') => {
+                (Operation::Delete(OpAdjust::Empty), 'b') => {
                     let start = state.get_current_word_start();
                     state.delete_range(start, state.cursor);
                     state.normal_mode();
                 }
-                (Operation::Change(OpAdjust::NONE), 'c') => {
+                (Operation::Change(OpAdjust::Empty), 'c') => {
                     state.delete_all();
                     state.insert_mode();
                 }
-                (Operation::Delete(OpAdjust::NONE), 'd') => {
+                (Operation::Delete(OpAdjust::Empty), 'd') => {
                     state.delete_all();
                     state.normal_mode();
                 }
