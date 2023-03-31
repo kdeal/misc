@@ -8,6 +8,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, ScrollUp},
     ExecutableCommand, QueueableCommand,
 };
+use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum OpAdjust {
@@ -176,7 +177,7 @@ impl PromptState {
             self.get_current_word_end()
         } else {
             let word_start = self.get_next_word_start();
-            if word_start == self.line.len() -1 {
+            if word_start == self.line.len() - 1 {
                 word_start
             } else {
                 word_start - 1
@@ -199,7 +200,7 @@ impl PromptState {
         self.cursor = 0;
     }
 
-    fn insert_char(&mut self , c: char) {
+    fn insert_char(&mut self, c: char) {
         if self.cursor < self.max_cursor() {
             self.line.insert(self.cursor, c);
         } else {
@@ -300,7 +301,7 @@ fn handle_key(
                     let end = state.get_current_word_end();
                     state.delete_range(state.cursor, end + 1);
                     state.insert_mode();
-                },
+                }
                 (Operation::Delete(OpAdjust::NONE), 'e') => {
                     let end = state.get_current_word_end();
                     state.delete_range(state.cursor, end + 1);
@@ -310,7 +311,7 @@ fn handle_key(
                     let start = state.get_current_word_start();
                     state.delete_range(start, state.cursor);
                     state.insert_mode();
-                },
+                }
                 (Operation::Delete(OpAdjust::NONE), 'b') => {
                     let start = state.get_current_word_start();
                     state.delete_range(start, state.cursor);
@@ -319,7 +320,7 @@ fn handle_key(
                 (Operation::Change(OpAdjust::NONE), 'c') => {
                     state.delete_all();
                     state.insert_mode();
-                },
+                }
                 (Operation::Delete(OpAdjust::NONE), 'd') => {
                     state.delete_all();
                     state.normal_mode();
@@ -463,11 +464,32 @@ fn print_options(
     Ok(())
 }
 
+fn calculate_match_score(
+    option: &str,
+    filter_terms: &[&str],
+    matcher: &SkimMatcherV2,
+) -> Option<i64> {
+    let mut score = 0;
+    for term in filter_terms {
+        match matcher.fuzzy_match(option, term) {
+            Some(term_score) => score += term_score,
+            None => return None,
+        }
+    }
+    Some(score)
+}
+
 fn filter_options<'a>(filter: &str, options: &'a [String]) -> Vec<&'a String> {
-    options
+    let filter_terms: Vec<&str> = filter.split_whitespace().collect();
+    let matcher = SkimMatcherV2::default().smart_case();
+    let mut matched: Vec<(i64, &String)> = options
         .iter()
-        .filter(|option| option.contains(filter))
-        .collect()
+        .filter_map(|option| {
+            calculate_match_score(option, &filter_terms, &matcher).map(|score| (-score, option))
+        })
+        .collect();
+    matched.sort();
+    matched.into_iter().map(|(_, option)| option).collect()
 }
 
 pub fn select_prompt<'a>(prompt: &str, options: &'a Vec<String>) -> anyhow::Result<&'a str> {
