@@ -4,7 +4,7 @@ use anyhow::bail;
 use crossterm::{
     self, cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    style::{self, Attribute, Color, Stylize},
+    style::{self, Attribute, Color, PrintStyledContent, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, ScrollUp},
     ExecutableCommand, QueueableCommand,
 };
@@ -384,23 +384,26 @@ pub fn basic_prompt(prompt: &str) -> anyhow::Result<String> {
 
 struct SelectionState {
     selected: u16,
-    num_items: u16,
+    items_shown: u16,
     max_index: u16,
+    has_options: bool,
     prompt_state: PromptState,
 }
 
 impl SelectionState {
-    fn new(num_items: u16, input_start: u16, input_row: u16) -> Self {
+    fn new(items_shown: u16, input_start: u16, input_row: u16) -> Self {
         SelectionState {
             selected: 0,
-            num_items,
-            max_index: num_items - 1,
+            items_shown,
+            max_index: items_shown - 1,
+            has_options: true,
             prompt_state: PromptState::new(input_start, input_row),
         }
     }
 
-    fn update_max_index(&mut self, max_index: u16) {
-        self.max_index = max_index;
+    fn update_max_index(&mut self, max_index: u16, has_options: bool) {
+        self.has_options = has_options;
+        self.max_index = max_index.min(self.items_shown);
         if self.selected > self.max_index {
             self.selected = self.max_index
         }
@@ -425,6 +428,11 @@ fn select_handle_key(
     modifiers: KeyModifiers,
 ) -> anyhow::Result<bool> {
     match (&state.prompt_state.mode, key, modifiers) {
+        (_, KeyCode::Enter, KeyModifiers::NONE) => {
+            if state.has_options {
+                return Ok(true);
+            }
+        }
         (PromptMode::Normal, KeyCode::Char('j'), KeyModifiers::NONE) => state.next_item(),
         (PromptMode::Normal, KeyCode::Char('k'), KeyModifiers::NONE) => state.previous_item(),
         (PromptMode::Insert, KeyCode::Char('n'), KeyModifiers::CONTROL) => state.next_item(),
@@ -497,14 +505,17 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a Vec<String>) -> anyhow::Resu
     eprint!("{} ", prompt);
     stderr.flush()?;
 
-    let num_items = 10.min(options.len());
+    let items_shown = 10.min(options.len());
     let input_start = u16::try_from(prompt.len() + 1)?;
-    let mut state = SelectionState::new(u16::try_from(num_items)?, input_start, 0);
+    let mut state = SelectionState::new(u16::try_from(items_shown)?, input_start, 0);
 
     enable_raw_mode()?;
-    stderr
-        .queue(ScrollUp(state.num_items))?
-        .queue(cursor::MoveToPreviousLine(state.num_items - 1))?;
+    stderr.queue(ScrollUp(state.items_shown))?;
+    if state.items_shown > 1 {
+        stderr.queue(cursor::MoveToPreviousLine(state.items_shown - 1))?;
+    } else {
+        stderr.queue(cursor::MoveToColumn(0))?;
+    }
     let (_, position_row) = cursor::position()?;
     print_options(&state, &options.iter().collect(), &mut stderr)?;
     // We shifted the input row, so we need to update it
@@ -521,14 +532,12 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a Vec<String>) -> anyhow::Resu
         }
 
         let filtered_options = filter_options(&state.prompt_state.line, options);
-        let new_num_items = state
-            .num_items
-            .min(u16::try_from(filtered_options.len()).unwrap_or(state.num_items));
-        state.update_max_index(if new_num_items > 0 {
-            new_num_items - 1
+        if filtered_options.is_empty() {
+            state.update_max_index(0, false);
         } else {
-            0
-        });
+            let new_num_items = u16::try_from(filtered_options.len()).unwrap_or(state.items_shown);
+            state.update_max_index(new_num_items - 1, true);
+        }
 
         print_prompt_input(&state.prompt_state, &mut stderr)?;
         stderr.queue(cursor::MoveToNextLine(1))?;
@@ -537,13 +546,19 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a Vec<String>) -> anyhow::Resu
         stderr.flush()?;
     }
     stderr
-        .queue(cursor::MoveToNextLine(1))?
+        .queue(cursor::MoveTo(
+            state.prompt_state.input_start,
+            state.prompt_state.input_row,
+        ))?
         .queue(Clear(ClearType::FromCursorDown))?
         .flush()?;
     disable_raw_mode()?;
 
-    // TODO: do last reprint that displays the selected item
-    Ok(&options[usize::from(state.selected)])
+    let filtered_options = filter_options(&state.prompt_state.line, options);
+    let result = filtered_options[usize::from(state.selected)];
+    let result_output = format!("{}\n", &result);
+    stderr.execute(PrintStyledContent(result_output.with(Color::Cyan)))?;
+    Ok(result)
 }
 
 fn print_boolean_toogle(state: bool, stderr: &mut dyn Write) -> anyhow::Result<()> {

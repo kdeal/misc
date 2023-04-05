@@ -1,6 +1,7 @@
 use git2::Repository;
 use log::info;
 use std::fs;
+use std::io;
 
 use crate::config::Config;
 use crate::git;
@@ -98,5 +99,15 @@ pub fn confirm(prompt: &str, default: bool) -> anyhow::Result<()> {
     if !boolean_prompt(prompt, default)? {
         std::process::exit(1);
     }
+    Ok(())
+}
+
+pub fn select(prompt: &str) -> anyhow::Result<()> {
+    let mut options = vec![];
+    for line in io::stdin().lines().flatten() {
+        options.push(line);
+    }
+    let result = select_prompt(prompt, &options)?;
+    println!("{}", result);
     Ok(())
 }
