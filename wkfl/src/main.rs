@@ -34,6 +34,9 @@ enum Commands {
         #[arg(short = 't', long)]
         default_true: bool,
     },
+    Select {
+        prompt: Option<String>,
+    },
 }
 
 pub struct Context {
@@ -91,6 +94,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         } => {
             let prompt = user_prompt.unwrap_or("Confirm?".to_string());
             actions::confirm(&prompt, default)?
+        }
+        Commands::Select {
+            prompt: user_prompt,
+        } => {
+            let prompt = user_prompt.unwrap_or("?".to_string());
+            actions::select(&prompt)?
         }
     };
 
