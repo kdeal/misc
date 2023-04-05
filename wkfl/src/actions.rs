@@ -1,9 +1,11 @@
 use git2::Repository;
 use log::info;
+use std::fs;
 
 use crate::config::Config;
 use crate::git;
 use crate::prompts::basic_prompt;
+use crate::prompts::boolean_prompt;
 use crate::prompts::select_prompt;
 use crate::repositories::get_repositories_in_directory;
 use crate::utils;
@@ -89,5 +91,12 @@ pub fn print_repo_debug_info(repo: Repository) -> anyhow::Result<()> {
     info!("path: {:?}", repo.path());
     info!("workdir: {:?}", repo.workdir());
     info!("has_changes: {}", git::has_changes(&repo)?);
+    Ok(())
+}
+
+pub fn confirm(prompt: &str, default: bool) -> anyhow::Result<()> {
+    if !boolean_prompt(prompt, default)? {
+        std::process::exit(1);
+    }
     Ok(())
 }

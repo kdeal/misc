@@ -29,6 +29,11 @@ enum Commands {
     RepoDebug,
     Repos,
     Repo,
+    Confirm {
+        prompt: Option<String>,
+        #[arg(short = 't', long)]
+        default_true: bool,
+    },
 }
 
 pub struct Context {
@@ -58,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         config: config::get_config()?,
         shell_actions: vec![],
     };
-    match &cli.command {
+    match cli.command {
         Commands::Start => {
             let repo = git::get_repository()?;
             let name = prompts::basic_prompt("Name:")?;
@@ -80,6 +85,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Commands::Repos => actions::list_repositories(context.config)?,
         Commands::Repo => actions::switch_repo(&mut context)?,
+        Commands::Confirm {
+            prompt: user_prompt,
+            default_true: default,
+        } => {
+            let prompt = user_prompt.unwrap_or("Confirm?".to_string());
+            actions::confirm(&prompt, default)?
+        }
     };
 
     if let Some(shell_actions_file) = cli.shell_actions_file {

@@ -4,7 +4,7 @@ use anyhow::bail;
 use crossterm::{
     self, cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    style::{self, Color},
+    style::{self, Attribute, Color, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, ScrollUp},
     ExecutableCommand, QueueableCommand,
 };
@@ -542,5 +542,69 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a Vec<String>) -> anyhow::Resu
         .flush()?;
     disable_raw_mode()?;
 
+    // TODO: do last reprint that displays the selected item
     Ok(&options[usize::from(state.selected)])
+}
+
+fn print_boolean_toogle(state: bool, stderr: &mut dyn Write) -> anyhow::Result<()> {
+    if state {
+        stderr
+            .queue(style::PrintStyledContent(
+                " y ".on(Color::DarkGreen).attribute(Attribute::Bold),
+            ))?
+            .queue(style::Print(" | "))?
+            .queue(style::PrintStyledContent(" n ".attribute(Attribute::Dim)))?;
+    } else {
+        stderr
+            .queue(style::PrintStyledContent(" y ".attribute(Attribute::Dim)))?
+            .queue(style::Print(" | "))?
+            .queue(style::PrintStyledContent(
+                " n ".on(Color::Red).attribute(Attribute::Bold),
+            ))?;
+    }
+    Ok(())
+}
+
+pub fn boolean_prompt(prompt: &str, default: bool) -> anyhow::Result<bool> {
+    let mut stderr = io::stderr();
+    let mut state = default;
+
+    eprint!("{} ", prompt);
+
+    enable_raw_mode()?;
+    stderr.queue(cursor::SavePosition)?.queue(cursor::Hide)?;
+    print_boolean_toogle(state, &mut stderr)?;
+    stderr.flush()?;
+
+    while let Event::Key(KeyEvent {
+        code, modifiers, ..
+    }) = event::read()?
+    {
+        match (code, modifiers) {
+            (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                bail!("ctrl-c sent");
+            }
+            (code, KeyModifiers::NONE | KeyModifiers::SHIFT) => match code {
+                KeyCode::Enter => {
+                    break;
+                }
+                KeyCode::Char('l' | 'f' | 'n') => {
+                    state = false;
+                }
+                KeyCode::Char('h' | 't' | 'y') => {
+                    state = true;
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+        stderr.queue(cursor::RestorePosition)?;
+        print_boolean_toogle(state, &mut stderr)?;
+        stderr.flush()?;
+    }
+
+    stderr.execute(cursor::Show)?;
+    disable_raw_mode()?;
+    eprintln!();
+    Ok(state)
 }
