@@ -1,4 +1,3 @@
-use git2::Repository;
 use log::info;
 use std::fs;
 use std::io;
@@ -14,12 +13,16 @@ use crate::shell_actions::ShellAction;
 use crate::utils;
 use crate::Context;
 
-pub fn start_workflow(
-    repo: Repository,
-    name: &String,
-    ticket: &Option<String>,
-    context: &mut Context,
-) -> anyhow::Result<()> {
+pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
+    let repo = git::get_repository()?;
+    let name = basic_prompt("Name:")?;
+    let ticket_str = basic_prompt("Ticket:")?;
+    let ticket = if ticket_str.is_empty() {
+        None
+    } else {
+        Some(ticket_str)
+    };
+
     let user = utils::get_current_user().ok_or(anyhow::anyhow!("Unable to determine user"))?;
     let branch_name = match ticket {
         Some(ticket_key) => format!("{user}/{ticket_key}_{name}"),
@@ -28,7 +31,7 @@ pub fn start_workflow(
 
     if git::uses_worktrees(&repo) {
         info!("Creating worktree named '{name}' on branch '{branch_name}'");
-        let worktree_path = git::create_worktree(&repo, name, &branch_name)?;
+        let worktree_path = git::create_worktree(&repo, &name, &branch_name)?;
         context.shell_actions.push(ShellAction::Cd {
             path: worktree_path,
         });
@@ -40,7 +43,8 @@ pub fn start_workflow(
     Ok(())
 }
 
-pub fn end_workflow(repo: Repository) -> anyhow::Result<()> {
+pub fn end_workflow() -> anyhow::Result<()> {
+    let repo = git::get_repository()?;
     if repo.is_worktree() {
         anyhow::bail!("For worktree based repos call stop from base of repo with name of worktree");
     } else if repo.is_bare() {
@@ -126,7 +130,8 @@ pub fn clone_repo(context: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn print_repo_debug_info(repo: Repository) -> anyhow::Result<()> {
+pub fn print_repo_debug_info() -> anyhow::Result<()> {
+    let repo = git::get_repository()?;
     info!("worktree: {}", repo.is_worktree());
     info!("bare: {}", repo.is_bare());
     info!("state: {:?}", repo.state());
