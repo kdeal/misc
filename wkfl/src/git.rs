@@ -190,3 +190,19 @@ pub fn get_worktrees(repo: &Repository) -> anyhow::Result<Vec<String>> {
         .map(|s| s.to_string())
         .collect())
 }
+
+pub fn clone_repo(repo_url: &str, repo_path: &Path) -> anyhow::Result<()> {
+    info!("Cloing {} into {}...", repo_url, repo_path.display());
+    // Shell out to git for clone because libgit2 doesn't take into account .ssh/config
+    let clone_output = Command::new("git")
+        .args(["clone", repo_url, &repo_path.to_string_lossy()])
+        .output()?;
+    if !clone_output.status.success() {
+        anyhow::bail!(
+            "Failed to clone {}, output: {}",
+            repo_url,
+            String::from_utf8_lossy(&clone_output.stderr)
+        );
+    }
+    Ok(())
+}
