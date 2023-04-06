@@ -29,6 +29,7 @@ enum Commands {
     RepoDebug,
     Repos,
     Repo,
+    Clone,
     Confirm {
         prompt: Option<String>,
         #[arg(short = 't', long)]
@@ -88,6 +89,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Commands::Repos => actions::list_repositories(context.config)?,
         Commands::Repo => actions::switch_repo(&mut context)?,
+        Commands::Clone => actions::clone_repo(&mut context)?,
         Commands::Confirm {
             prompt: user_prompt,
             default_true: default,

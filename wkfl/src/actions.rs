@@ -2,6 +2,7 @@ use git2::Repository;
 use log::info;
 use std::fs;
 use std::io;
+use url::Url;
 
 use crate::config::Config;
 use crate::git;
@@ -9,6 +10,7 @@ use crate::prompts::basic_prompt;
 use crate::prompts::boolean_prompt;
 use crate::prompts::select_prompt;
 use crate::repositories::get_repositories_in_directory;
+use crate::shell_actions::ShellAction;
 use crate::utils;
 use crate::Context;
 
@@ -27,11 +29,9 @@ pub fn start_workflow(
     if git::uses_worktrees(&repo) {
         info!("Creating worktree named '{name}' on branch '{branch_name}'");
         let worktree_path = git::create_worktree(&repo, name, &branch_name)?;
-        context
-            .shell_actions
-            .push(crate::shell_actions::ShellAction::Cd {
-                path: worktree_path,
-            });
+        context.shell_actions.push(ShellAction::Cd {
+            path: worktree_path,
+        });
     } else {
         info!("Creating branch '{branch_name}' and checking it out");
         git::switch_branch(&repo, &branch_name, true)?;
@@ -82,7 +82,47 @@ pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
     let repo_path = base_repo_path.join(repo_name);
     context
         .shell_actions
-        .push(crate::shell_actions::ShellAction::Cd { path: repo_path });
+        .push(ShellAction::Cd { path: repo_path });
+    Ok(())
+}
+
+fn extract_repo_from_url(repo_url_str: &str) -> anyhow::Result<String> {
+    // This isn't perfect, but should be good enough for me and doesn't
+    // require writing a regex
+    if repo_url_str.starts_with("git@") {
+        let (_, repo) = repo_url_str.split_once(':').ok_or(anyhow::anyhow!(
+            "Repo url that start with git@ must be in the form 'git@<host>:<repo>'"
+        ))?;
+        return Ok(repo.to_string());
+    }
+
+    let repo_url = Url::parse(repo_url_str)?;
+    let repo = repo_url.path();
+    if repo.starts_with('/') {
+        Ok(repo
+            .strip_prefix('/')
+            .expect("Checked that it starts with '/'")
+            .to_string())
+    } else {
+        Ok(repo.to_string())
+    }
+}
+
+pub fn clone_repo(context: &mut Context) -> anyhow::Result<()> {
+    let repo_url = basic_prompt("Clone Url:")?;
+    let repo = extract_repo_from_url(&repo_url)?;
+
+    let repo_path = context.config.repositories_directory_path()?.join(repo);
+    fs::create_dir_all(&repo_path)?;
+
+    let use_worktrees = boolean_prompt("Use worktrees?", false)?;
+    if use_worktrees {
+        anyhow::bail!("Cloning and using worktrees is unsupported");
+    }
+    git::clone_repo(&repo_url, &repo_path)?;
+    context
+        .shell_actions
+        .push(ShellAction::Cd { path: repo_path });
     Ok(())
 }
 
