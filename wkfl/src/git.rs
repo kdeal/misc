@@ -181,3 +181,12 @@ pub fn remove_branch(repo: &Repository, branch_name: &str) -> anyhow::Result<()>
     branch.delete()?;
     Ok(())
 }
+
+pub fn get_worktrees(repo: &Repository) -> anyhow::Result<Vec<String>> {
+    Ok(repo
+        .worktrees()?
+        .into_iter()
+        .flatten()
+        .map(|s| s.to_string())
+        .collect())
+}

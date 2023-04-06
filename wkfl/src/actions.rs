@@ -44,8 +44,9 @@ pub fn end_workflow(repo: Repository) -> anyhow::Result<()> {
     if repo.is_worktree() {
         anyhow::bail!("For worktree based repos call stop from base of repo with name of worktree");
     } else if repo.is_bare() {
-        let workspace_name = basic_prompt("Workspace Name:")?;
-        git::remove_worktree(&repo, &workspace_name)?;
+        let worktrees = git::get_worktrees(&repo)?;
+        let workspace_name = select_prompt("Worktree Name:", &worktrees)?;
+        git::remove_worktree(&repo, workspace_name)?;
     } else if git::on_default_branch(&repo)? {
         let branch_name = basic_prompt("Branch Name:")?;
         git::remove_branch(&repo, &branch_name)?;
@@ -91,7 +92,12 @@ pub fn print_repo_debug_info(repo: Repository) -> anyhow::Result<()> {
     info!("state: {:?}", repo.state());
     info!("path: {:?}", repo.path());
     info!("workdir: {:?}", repo.workdir());
-    info!("has_changes: {}", git::has_changes(&repo)?);
+    if !repo.is_bare() {
+        info!("has_changes: {}", git::has_changes(&repo)?);
+    } else {
+        info!("has_changes: n/a");
+    }
+    info!("worktrees: {:?}", git::get_worktrees(&repo)?);
     Ok(())
 }
 
