@@ -11,7 +11,7 @@ clap = { version = "4.1.8", features = ["derive"] }
 crossterm = "0.26.1"
 env_logger = "0.10.0"
 fuzzy-matcher = "0.3.7"
-git2 = "0.16.1"
+git2 = "0.17.1"
 home = "0.5.5"
 log = "0.4.17"
 serde = { version = "1.0.163", features = ["derive"] }
