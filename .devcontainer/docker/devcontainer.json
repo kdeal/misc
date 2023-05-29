@@ -1,0 +1,9 @@
+{
+    "name": "Docker",
+    "image": "ubuntu:jammy",
+    "remoteUser": "vscode",
+    "features": {
+        "ghcr.io/devcontainers/features/sshd:1": "latest",
+        "ghcr.io/devcontainers/features/docker-in-docker:2": "latest"
+    }
+}
