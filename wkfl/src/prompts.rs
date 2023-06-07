@@ -10,6 +10,8 @@ use crossterm::{
 };
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 
+const MAX_OPTIONS_SHOWN: usize = 10;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum OpAdjust {
     Empty,
@@ -449,7 +451,10 @@ fn print_options(
 ) -> anyhow::Result<()> {
     stderr.queue(Clear(ClearType::FromCursorDown))?;
     let selected_usize = usize::from(state.selected);
-    for (i, option) in options.iter().enumerate() {
+    for (i, option) in options.iter().take(MAX_OPTIONS_SHOWN).enumerate() {
+        if i > 0 {
+            stderr.queue(cursor::MoveToNextLine(1))?;
+        }
         if i == selected_usize {
             stderr
                 .queue(style::SetForegroundColor(Color::DarkCyan))?
@@ -462,9 +467,6 @@ fn print_options(
                 .queue(style::SetAttribute(style::Attribute::Reset))?;
         }
         stderr.queue(style::Print(&option))?;
-        if i < 10 {
-            stderr.queue(cursor::MoveToNextLine(1))?;
-        }
     }
     stderr
         .queue(style::SetForegroundColor(Color::Reset))?
