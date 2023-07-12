@@ -3,14 +3,17 @@ use std::fs;
 use std::io;
 use url::Url;
 
+use crate::config::get_repo_config;
 use crate::config::Config;
 use crate::git;
+use crate::git::determine_repo_root_dir;
 use crate::prompts::basic_prompt;
 use crate::prompts::boolean_prompt;
 use crate::prompts::select_prompt;
 use crate::repositories::get_repositories_in_directory;
 use crate::shell_actions::ShellAction;
 use crate::utils;
+use crate::utils::run_commands;
 use crate::Context;
 
 pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
@@ -29,6 +32,9 @@ pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
         None => format!("{user}/{name}"),
     };
 
+    let repo_config = get_repo_config(determine_repo_root_dir(&repo))?;
+    run_commands(&repo_config.pre_start_commands)?;
+
     if git::uses_worktrees(&repo) {
         info!("Creating worktree named '{name}' on branch '{branch_name}'");
         let worktree_path = git::create_worktree(&repo, &name, &branch_name)?;
@@ -40,11 +46,15 @@ pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
         git::switch_branch(&repo, &branch_name, true)?;
     };
 
+    run_commands(&repo_config.post_start_commands)?;
+
     Ok(())
 }
 
 pub fn end_workflow() -> anyhow::Result<()> {
     let repo = git::get_repository()?;
+    let repo_config = get_repo_config(determine_repo_root_dir(&repo))?;
+    run_commands(&repo_config.pre_end_commands)?;
     if repo.is_worktree() {
         anyhow::bail!("For worktree based repos call stop from base of repo with name of worktree");
     } else if repo.is_bare() {
@@ -57,6 +67,7 @@ pub fn end_workflow() -> anyhow::Result<()> {
     } else {
         git::remove_current_branch(&repo)?;
     }
+    run_commands(&repo_config.post_end_commands)?;
     Ok(())
 }
 
