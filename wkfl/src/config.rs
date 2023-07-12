@@ -1,16 +1,28 @@
 use std::{
-    fs::{create_dir_all, read_to_string, File},
-    path::PathBuf,
+    fs::read_to_string,
+    path::{Path, PathBuf},
 };
 
 use home::home_dir;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
     #[serde(default = "default_repo_base_dir")]
     repositories_directory: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RepoConfig {
+    #[serde(default)]
+    pub pre_start_commands: Vec<String>,
+    #[serde(default)]
+    pub post_start_commands: Vec<String>,
+    #[serde(default)]
+    pub pre_end_commands: Vec<String>,
+    #[serde(default)]
+    pub post_end_commands: Vec<String>,
 }
 
 impl Config {
@@ -35,16 +47,30 @@ fn default_repo_base_dir() -> String {
 
 pub fn get_config() -> anyhow::Result<Config> {
     let mut config_buf = home_dir().ok_or(anyhow::anyhow!("Can't determine home dir"))?;
+
     config_buf.push(".config/wkfl/");
     let config_dir = config_buf.as_path();
     if !config_dir.exists() {
-        create_dir_all(config_dir)?;
+        return Ok(toml::from_str("")?);
     }
+
     config_buf.push("config.toml");
     let config_file = config_buf.as_path();
     if !config_file.exists() {
-        File::create(config_file)?;
+        return Ok(toml::from_str("")?);
     }
+
+    let config_str = read_to_string(config_file)?;
+    let config = toml::from_str(&config_str)?;
+    Ok(config)
+}
+
+pub fn get_repo_config(repo_root_dir: &Path) -> anyhow::Result<RepoConfig> {
+    let config_file = repo_root_dir.join(".git/info/wkfl.toml");
+    if !config_file.exists() {
+        return Ok(toml::from_str("")?);
+    }
+
     let config_str = read_to_string(config_file)?;
     let config = toml::from_str(&config_str)?;
     Ok(config)
