@@ -14,6 +14,6 @@ fuzzy-matcher = "0.3.7"
 git2 = "0.17.1"
 home = "0.5.5"
 log = "0.4.19"
-serde = { version = "1.0.180", features = ["derive"] }
+serde = { version = "1.0.188", features = ["derive"] }
 toml = "0.7.6"
 url = "2.4.0"
