@@ -44,10 +44,7 @@ fn get_sub_directories(directory: &Path) -> anyhow::Result<Vec<PathBuf>> {
 pub fn get_repositories_in_directory(directory: &Path) -> anyhow::Result<Vec<PathBuf>> {
     let mut repositories = vec![];
     let mut dirs_to_check = vec![directory.to_owned()];
-    while !dirs_to_check.is_empty() {
-        let current_dir = dirs_to_check
-            .pop()
-            .expect("While loop ensures there is something to pop");
+    while let Some(current_dir) = dirs_to_check.pop() {
         if !current_dir.exists() {
             continue;
         }
