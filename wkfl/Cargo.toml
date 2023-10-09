@@ -15,5 +15,5 @@ git2 = "0.18.1"
 home = "0.5.5"
 log = "0.4.20"
 serde = { version = "1.0.188", features = ["derive"] }
-toml = "0.8.1"
+toml = "0.8.2"
 url = "2.4.1"
