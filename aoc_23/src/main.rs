@@ -1,21 +1,19 @@
 use std::env;
 use std::fs;
 
+fn find_first_digit<I: Iterator<Item = char>>(mut chars: I) -> Option<u32> {
+    chars.find(|c| c.is_ascii_digit()).map(|c| c.to_digit(10).unwrap())
+}
+
 fn extract_calibration_numbers(line: &str) -> u32 {
-    if let Some(first_digit_str) = line.chars().find(|c| c.is_ascii_digit()) {
-        let first_digit = first_digit_str.to_digit(10).unwrap();
-        let last_digit = line
-            .chars()
-            .rev()
-            .find(|c| c.is_ascii_digit())
-            .unwrap()
-            .to_digit(10)
-            .unwrap();
+    if let Some(first_digit) = find_first_digit(line.chars()) {
+        let last_digit = find_first_digit(line.chars().rev()).unwrap();
         first_digit * 10 + last_digit
     } else {
         0
     }
 }
+
 
 fn day1_problem_a(args: Vec<String>) {
     let file_path = &args[2];
@@ -30,7 +28,8 @@ fn day1_problem_a(args: Vec<String>) {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let problem = &args[1];
-    match problem {
+    match problem.as_str() {
         "1a" => day1_problem_a(args),
+        &_ => (),
     };
 }
