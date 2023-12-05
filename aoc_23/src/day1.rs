@@ -2,18 +2,20 @@ use std::fs;
 
 const NUMBERS_SPELLED: &'static [(&str, u32)] = &[
     ("one", 1),
-    ("two" , 2),
-    ("three" , 3),
-    ("four" , 4),
-    ("five" , 5),
-    ("six" , 6),
-    ("seven" , 7),
-    ("eight" , 8),
-    ("nine" , 9),
+    ("two", 2),
+    ("three", 3),
+    ("four", 4),
+    ("five", 5),
+    ("six", 6),
+    ("seven", 7),
+    ("eight", 8),
+    ("nine", 9),
 ];
 
 fn find_first_digit<I: Iterator<Item = char>>(mut chars: I) -> Option<u32> {
-    chars.find(|c| c.is_ascii_digit()).map(|c| c.to_digit(10).unwrap())
+    chars
+        .find(|c| c.is_ascii_digit())
+        .map(|c| c.to_digit(10).unwrap())
 }
 
 fn extract_calibration_numbers(line: &str) -> u32 {
@@ -24,7 +26,6 @@ fn extract_calibration_numbers(line: &str) -> u32 {
         0
     }
 }
-
 
 pub fn problem_a(args: Vec<String>) {
     let file_path = &args[2];
