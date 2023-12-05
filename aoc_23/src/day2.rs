@@ -1,5 +1,3 @@
-use std::fs;
-
 #[derive(Default, Debug)]
 struct Cubes {
     blue: u32,
@@ -49,9 +47,7 @@ fn parse_game(line: &str) -> Option<Game> {
     })
 }
 
-pub fn problem_a(args: Vec<String>) {
-    let file_path = &args[2];
-    let contents = fs::read_to_string(file_path).expect("Should have been able to read the file");
+pub fn problem_a(contents: String) {
     let games: Vec<Game> = contents
         .split('\n')
         .filter_map(|line| parse_game(line))
@@ -82,9 +78,7 @@ fn calculate_cube_power(game: Game) -> u32 {
     blue_max * green_max * red_max
 }
 
-pub fn problem_b(args: Vec<String>) {
-    let file_path = &args[2];
-    let contents = fs::read_to_string(file_path).expect("Should have been able to read the file");
+pub fn problem_b(contents: String) {
     let result: u32 = contents
         .split('\n')
         .filter_map(|line| parse_game(line))
