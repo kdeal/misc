@@ -47,7 +47,7 @@ fn parse_game(line: &str) -> Option<Game> {
     })
 }
 
-pub fn problem_a(contents: String) {
+pub fn problem_a(contents: String) -> u32 {
     let games: Vec<Game> = contents
         .split('\n')
         .filter_map(|line| parse_game(line))
@@ -57,7 +57,7 @@ pub fn problem_a(contents: String) {
         red: 12,
         green: 13,
     };
-    let valid_games: u32 = games
+    games
         .iter()
         .filter(|game| {
             game.rounds.iter().all(|round| {
@@ -67,8 +67,7 @@ pub fn problem_a(contents: String) {
             })
         })
         .map(|game| game.id)
-        .sum();
-    println!("{:?}", valid_games);
+        .sum()
 }
 
 fn calculate_cube_power(game: Game) -> u32 {
@@ -78,11 +77,10 @@ fn calculate_cube_power(game: Game) -> u32 {
     blue_max * green_max * red_max
 }
 
-pub fn problem_b(contents: String) {
-    let result: u32 = contents
+pub fn problem_b(contents: String) -> u32 {
+    contents
         .split('\n')
         .filter_map(|line| parse_game(line))
         .map(|game| calculate_cube_power(game))
-        .sum();
-    println!("{}", result);
+        .sum()
 }

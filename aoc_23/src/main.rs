@@ -9,11 +9,12 @@ fn main() {
     let problem = &args[1];
     let file_path = &args[2];
     let contents = fs::read_to_string(file_path).expect("Should have been able to read the file");
-    match problem.as_str() {
+    let result = match problem.as_str() {
         "1a" => day1::problem_a(contents),
         "1b" => day1::problem_b(contents),
         "2a" => day2::problem_a(contents),
         "2b" => day2::problem_b(contents),
-        &_ => (),
+        &_ => panic!("Day not recognized"),
     };
+    println!("{}", result);
 }

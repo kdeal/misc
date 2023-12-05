@@ -25,12 +25,11 @@ fn extract_calibration_numbers(line: &str) -> u32 {
     }
 }
 
-pub fn problem_a(contents: String) {
-    let result: u32 = contents
+pub fn problem_a(contents: String) -> u32 {
+    contents
         .split('\n')
         .map(|line| extract_calibration_numbers(line))
-        .sum();
-    println!("{}", result);
+        .sum()
 }
 
 fn parse_spelled_digit(string: String, reversed: bool) -> Option<u32> {
@@ -74,10 +73,9 @@ fn extract_calibration_numbers_digit_and_spelled_digit(line: &str) -> u32 {
     }
 }
 
-pub fn problem_b(contents: String) {
-    let result: u32 = contents
+pub fn problem_b(contents: String) -> u32 {
+    contents
         .split('\n')
         .map(|line| extract_calibration_numbers_digit_and_spelled_digit(line))
-        .sum();
-    println!("{}", result);
+        .sum()
 }
