@@ -3,6 +3,7 @@ use std::fs;
 
 mod day1;
 mod day2;
+mod day3;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -14,6 +15,7 @@ fn main() {
         "1b" => day1::problem_b(contents),
         "2a" => day2::problem_a(contents),
         "2b" => day2::problem_b(contents),
+        "3a" => day3::problem_a(contents),
         &_ => panic!("Day not recognized"),
     };
     println!("{}", result);
