@@ -19,6 +19,7 @@ fn main() {
         "3a" => day3::problem_a(contents),
         "3b" => day3::problem_b(contents),
         "4a" => day4::problem_a(contents),
+        "4b" => day4::problem_b(contents),
         &_ => panic!("Day not recognized"),
     };
     println!("{}", result);
