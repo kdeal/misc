@@ -6,12 +6,12 @@ edition = "2021"
 publish = false
 
 [dependencies]
-anyhow = { version = "1.0.81", features = ["backtrace"] }
-clap = { version = "4.5.3", features = ["derive"] }
+anyhow = { version = "1.0.82", features = ["backtrace"] }
+clap = { version = "4.5.4", features = ["derive"] }
 crossterm = "0.27.0"
 env_logger = "0.10.2"
 fuzzy-matcher = "0.3.7"
-git2 = "0.18.2"
+git2 = "0.18.3"
 home = "0.5.9"
 log = "0.4.21"
 serde = { version = "1.0.197", features = ["derive"] }
