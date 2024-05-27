@@ -502,7 +502,7 @@ fn filter_options<'a>(filter: &str, options: &'a [String]) -> Vec<&'a String> {
     matched.into_iter().map(|(_, option)| option).collect()
 }
 
-pub fn select_prompt<'a>(prompt: &str, options: &'a Vec<String>) -> anyhow::Result<&'a str> {
+pub fn select_prompt<'a>(prompt: &str, options: &'a [String]) -> anyhow::Result<&'a str> {
     let mut stderr = io::stderr();
     eprint!("{} ", prompt);
     stderr.flush()?;
