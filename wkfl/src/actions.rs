@@ -84,7 +84,7 @@ pub fn list_repositories(config: Config) -> anyhow::Result<()> {
 pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
     let base_repo_path = context.config.repositories_directory_path()?;
     let repo_paths = get_repositories_in_directory(&base_repo_path)?;
-    let repo_paths_strs = repo_paths
+    let repo_paths_strs: Vec<String> = repo_paths
         .iter()
         .map(|path| {
             path.strip_prefix(&base_repo_path)
@@ -165,10 +165,11 @@ pub fn confirm(prompt: &str, default: bool) -> anyhow::Result<()> {
 }
 
 pub fn select(prompt: &str) -> anyhow::Result<()> {
-    let mut options = vec![];
-    for line in io::stdin().lines().flatten() {
-        options.push(line);
-    }
+    let options: Vec<String> = io::stdin()
+        .lines()
+        .map_while(Result::ok)
+        .filter(|s| !s.is_empty())
+        .collect();
     let result = select_prompt(prompt, &options)?;
     println!("{}", result);
     Ok(())
