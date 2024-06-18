@@ -1,8 +1,8 @@
-FROM ubuntu:jammy
+FROM ubuntu:nobel
 
 RUN apt-get update \
     && apt-get -y install --no-install-recommends \
-        fish vim \
+        vim \
         build-essential \
         nodejs npm \
         python3-pip \
