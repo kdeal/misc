@@ -8,7 +8,9 @@ RUN apt-get update \
         python3-pip \
         openssh-server \
     && rm -rf /var/lib/apt/lists/* \
-    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config \
+    #  Remove default user to free up 1000 uid in case I want to use it
+    && userdel ubuntu
 
 COPY entrypoint.sh /tmp/
 

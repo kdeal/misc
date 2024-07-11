@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Setup ssh user
-adduser --disabled-password --gecos "" "$SSH_USER"
+addgroup --gid "$SSH_GROUP_ID" "$SSH_USER"
+adduser --disabled-password --gecos "" --uid "$SSH_USER_ID" --gid "$SSH_GROUP_ID" "$SSH_USER"
 mkdir -p "/home/$SSH_USER/.ssh/"
 echo "$SSH_PUB_KEY" > "/home/$SSH_USER/.ssh/authorized_keys"
 
