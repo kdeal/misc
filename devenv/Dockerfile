@@ -4,11 +4,15 @@ RUN apt-get update \
     && yes | unminimize \
     && apt-get -y install --no-install-recommends \
         build-essential \
+        curl \
         git \
         man-db \
         nodejs npm \
-        python3-pip \
         openssh-server \
+        python3-pip \
+        python3-virtualenv \
+        rsync \
+        unzip \
         vim \
     && rm -rf /var/lib/apt/lists/* \
     && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config \
