@@ -1,12 +1,15 @@
 FROM ubuntu:noble
 
 RUN apt-get update \
+    && yes | unminimize \
     && apt-get -y install --no-install-recommends \
-        vim \
         build-essential \
+        git \
+        man-db \
         nodejs npm \
         python3-pip \
         openssh-server \
+        vim \
     && rm -rf /var/lib/apt/lists/* \
     && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config \
     #  Remove default user to free up 1000 uid in case I want to use it
