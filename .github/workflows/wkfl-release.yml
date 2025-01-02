@@ -1,14 +1,16 @@
 name: wkfl release
 
 on:
+  workflow_dispatch: {}
   push:
-    tags: [ "wkfl/v*" ]
+    branches: [ "main" ]
+    paths: [ "devenv/**" ]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  recreate_latest_release:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -17,9 +19,38 @@ jobs:
       contents: write
     steps:
     - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --release --verbose
     - name: Create release
-      run: gh release create ${GITHUB_REF#refs/tags/} target/release/wkfl
+      run: |
+        gh release delete wkfl/latest --yes || true
+        git push origin :latest || true
+        gh release create wkfl/latest
+      env:
+        GH_TOKEN: ${{ github.token }}
+
+  build:
+    name: ${{ matrix.job.target }}
+    runs-on: ${{ matrix.job.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { target: aarch64-apple-darwin, runs_on: macos-latest }
+          - { target: x86_64-unknown-linux-gnu, runs_on: ubuntu-latest }
+    defaults:
+      run:
+        working-directory: wkfl
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.job.target }}
+    - name: Build
+      run: |
+        cargo build --locked --release --target=${{ matrix.job.target }}
+        mv target/${{ matrix.job.target }}/release/wkfl wkfl-${{ matrix.job.target }}
+    - name: Create release
+      run: gh release upload wkfl/latest wkfl-${{ matrix.job.target }}
       env:
         GH_TOKEN: ${{ github.token }}
