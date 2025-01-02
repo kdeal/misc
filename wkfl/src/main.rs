@@ -1,10 +1,12 @@
 use std::{env, error::Error, path::PathBuf};
 
 use clap::{Parser, Subcommand};
+use notes::DailyNoteSpecifier;
 
 mod actions;
 mod config;
 mod git;
+mod notes;
 mod prompts;
 mod repositories;
 mod shell_actions;
@@ -29,6 +31,7 @@ enum Commands {
     RepoDebug,
     Repos,
     Repo,
+    Config,
     Clone,
     Confirm {
         prompt: Option<String>,
@@ -38,6 +41,17 @@ enum Commands {
     Select {
         prompt: Option<String>,
     },
+    Notes {
+        #[command(subcommand)]
+        command: NotesCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum NotesCommands {
+    Yesterday,
+    Today,
+    Tomorrow,
 }
 
 pub struct Context {
@@ -74,6 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::Repos => actions::list_repositories(context.config)?,
         Commands::Repo => actions::switch_repo(&mut context)?,
         Commands::Clone => actions::clone_repo(&mut context)?,
+        Commands::Config => actions::print_config(context.config),
         Commands::Confirm {
             prompt: user_prompt,
             default_true: default,
@@ -87,6 +102,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             let prompt = user_prompt.unwrap_or("?".to_string());
             actions::select(&prompt)?
         }
+        Commands::Notes {
+            command: notes_command,
+        } => match notes_command {
+            NotesCommands::Yesterday => {
+                actions::open_daily_note(DailyNoteSpecifier::Yesterday, &mut context)?
+            }
+            NotesCommands::Today => {
+                actions::open_daily_note(DailyNoteSpecifier::Today, &mut context)?
+            }
+            NotesCommands::Tomorrow => {
+                actions::open_daily_note(DailyNoteSpecifier::Tomorrow, &mut context)?
+            }
+        },
     };
 
     if let Some(shell_actions_file) = cli.shell_actions_file {

@@ -6,6 +6,7 @@ use std::{
 
 pub enum ShellAction {
     Cd { path: PathBuf },
+    EditFile { path: PathBuf },
 }
 
 pub fn write_shell_commands(commands: &Vec<ShellAction>, filepath: PathBuf) -> anyhow::Result<()> {
@@ -14,6 +15,10 @@ pub fn write_shell_commands(commands: &Vec<ShellAction>, filepath: PathBuf) -> a
         match command {
             ShellAction::Cd { path } => {
                 output_file.write_all(b"cd,")?;
+                output_file.write_all(path.to_string_lossy().as_bytes())?;
+            }
+            ShellAction::EditFile { path } => {
+                output_file.write_all(b"edit_file,")?;
                 output_file.write_all(path.to_string_lossy().as_bytes())?;
             }
         };
