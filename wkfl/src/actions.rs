@@ -7,6 +7,8 @@ use crate::config::get_repo_config;
 use crate::config::Config;
 use crate::git;
 use crate::git::determine_repo_root_dir;
+use crate::notes::format_note_path;
+use crate::notes::DailyNoteSpecifier;
 use crate::prompts::basic_prompt;
 use crate::prompts::boolean_prompt;
 use crate::prompts::select_prompt;
@@ -173,4 +175,22 @@ pub fn select(prompt: &str) -> anyhow::Result<()> {
     let result = select_prompt(prompt, &options)?;
     println!("{}", result);
     Ok(())
+}
+
+pub fn open_daily_note(
+    note_to_open: DailyNoteSpecifier,
+    context: &mut Context,
+) -> anyhow::Result<()> {
+    let notes_subpath = format_note_path(note_to_open)?;
+    let mut notes_file = context.config.notes_directory_path()?;
+    notes_file.push(notes_subpath);
+    fs::create_dir_all(notes_file.parent().unwrap())?;
+    context
+        .shell_actions
+        .push(ShellAction::EditFile { path: notes_file });
+    Ok(())
+}
+
+pub fn print_config(config: Config) {
+    info!("config: {:?}", config);
 }

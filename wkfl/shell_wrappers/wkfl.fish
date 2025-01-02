@@ -6,6 +6,8 @@ function wkfl --wraps wkfl
         switch $action[1]
             case "cd"
                 cd "$action[2]"
+            case "edit_file"
+                eval $EDITOR "$action[2]"
             case "*"
                 echo "Unhandled action: $action[1]"
         end

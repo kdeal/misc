@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     #[serde(default = "default_repo_base_dir")]
     repositories_directory: String,
+    notes_directory: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -37,6 +38,25 @@ impl Config {
             Ok(repo_path)
         } else {
             Ok(PathBuf::from(&self.repositories_directory))
+        }
+    }
+    pub fn notes_directory_path(&self) -> anyhow::Result<PathBuf> {
+        if let Some(notes_directory) = &self.notes_directory {
+            if notes_directory.starts_with("~/") {
+                let mut repo_path =
+                    home_dir().ok_or(anyhow::anyhow!("Can't determine home dir"))?;
+                let no_prefix_repos_dir = notes_directory
+                    .strip_prefix("~/")
+                    .expect("Checked that it had the prefix above. Should be safe");
+                repo_path.push(no_prefix_repos_dir);
+                Ok(repo_path)
+            } else {
+                Ok(PathBuf::from(&self.repositories_directory))
+            }
+        } else {
+            let mut notes_directory_path = self.repositories_directory_path()?;
+            notes_directory_path.push("notes");
+            Ok(notes_directory_path)
         }
     }
 }
