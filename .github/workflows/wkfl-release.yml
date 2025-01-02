@@ -23,7 +23,7 @@ jobs:
       run: |
         gh release delete wkfl/latest --yes || true
         git push origin :latest || true
-        gh release create wkfl/latest
+        gh release create wkfl/latest shell_wrappers/wkfl.fish
       env:
         GH_TOKEN: ${{ github.token }}
 
