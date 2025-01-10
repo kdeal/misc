@@ -5,7 +5,7 @@ use crossterm::{
     self, cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     style::{self, Attribute, Color, PrintStyledContent, Stylize},
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType, ScrollUp},
+    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
     ExecutableCommand, QueueableCommand,
 };
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
@@ -512,16 +512,16 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a [String]) -> anyhow::Result<
     let mut state = SelectionState::new(u16::try_from(items_shown)?, input_start, 0);
 
     enable_raw_mode()?;
-    stderr.queue(ScrollUp(state.items_shown))?;
-    if state.items_shown > 1 {
-        stderr.queue(cursor::MoveToPreviousLine(state.items_shown - 1))?;
-    } else {
-        stderr.queue(cursor::MoveToColumn(0))?;
-    }
+
+    // Make room for the options to be printed and return to input line
+    eprint!("{}", "\n".repeat(items_shown));
+    stderr.queue(cursor::MoveUp(state.items_shown))?;
+
     let (_, position_row) = cursor::position()?;
+    // Move from prompt to first line of options
+    stderr.queue(cursor::MoveToNextLine(1))?;
     print_options(&state, &options.iter().collect(), &mut stderr)?;
-    // We shifted the input row, so we need to update it
-    state.prompt_state.input_row = position_row - 1;
+    state.prompt_state.input_row = position_row;
     update_cursor(&state.prompt_state, &mut stderr)?;
     stderr.flush()?;
 
