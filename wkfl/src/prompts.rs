@@ -473,10 +473,11 @@ fn print_options(
     stderr.queue(Clear(ClearType::FromCursorDown))?;
     let selected_usize = usize::from(state.selected);
     let first_item = usize::from(state.first_item);
+    let items_shown = usize::from(state.items_shown);
     for (i, option) in options
         .iter()
         .skip(first_item)
-        .take(MAX_OPTIONS_SHOWN)
+        .take(items_shown)
         .enumerate()
     {
         if i > 0 {
@@ -540,7 +541,7 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a [String]) -> anyhow::Result<
     eprint!("{} ", prompt);
     stderr.flush()?;
 
-    let items_shown = 10.min(options.len());
+    let items_shown = MAX_OPTIONS_SHOWN.min(options.len());
     let input_start = u16::try_from(prompt.len() + 1)?;
     let max_items = u16::try_from(options.len())? - 1;
     let mut state = SelectionState::new(u16::try_from(items_shown)?, input_start, 0, max_items);
