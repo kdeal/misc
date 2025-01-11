@@ -520,6 +520,9 @@ fn calculate_match_score(
 }
 
 fn filter_options<'a>(filter: &str, options: &'a [String]) -> Vec<&'a String> {
+    if filter.is_empty() {
+        return options.iter().collect();
+    }
     let filter_terms: Vec<&str> = filter.split_whitespace().collect();
     let matcher = SkimMatcherV2::default().smart_case();
     let mut matched: Vec<(i64, &String)> = options
