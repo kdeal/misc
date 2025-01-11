@@ -386,6 +386,7 @@ pub fn basic_prompt(prompt: &str) -> anyhow::Result<String> {
 
 struct SelectionState {
     selected: u16,
+    first_item: u16,
     items_shown: u16,
     max_index: u16,
     has_options: bool,
@@ -393,11 +394,12 @@ struct SelectionState {
 }
 
 impl SelectionState {
-    fn new(items_shown: u16, input_start: u16, input_row: u16) -> Self {
+    fn new(items_shown: u16, input_start: u16, input_row: u16, max_index: u16) -> Self {
         SelectionState {
             selected: 0,
+            first_item: 0,
             items_shown,
-            max_index: items_shown - 1,
+            max_index,
             has_options: true,
             prompt_state: PromptState::new(input_start, input_row),
         }
@@ -405,21 +407,40 @@ impl SelectionState {
 
     fn update_max_index(&mut self, max_index: u16, has_options: bool) {
         self.has_options = has_options;
-        self.max_index = max_index.min(self.items_shown);
+        self.max_index = max_index;
         if self.selected > self.max_index {
-            self.selected = self.max_index
+            self.selected = self.max_index;
+        }
+
+        if self.first_item + self.items_shown > self.max_index {
+            // + 1 is to account for 0 based index of max index
+            if self.items_shown + 1 > self.max_index {
+                self.first_item = 0;
+            } else {
+                self.first_item = self.max_index - self.items_shown + 1;
+            }
         }
     }
 
     fn next_item(&mut self) {
         if self.selected < self.max_index {
-            self.selected += 1
+            self.selected += 1;
+            // - 2 is so the next item is shown and 0 based indexing
+            if self.first_item + self.items_shown - 2 < self.selected
+                && self.first_item < self.max_index
+            {
+                self.first_item += 1
+            }
         }
     }
 
     fn previous_item(&mut self) {
         if self.selected > 0 {
-            self.selected -= 1
+            self.selected -= 1;
+            // + 1 is so the previous item is shown
+            if self.first_item + 1 > self.selected && self.first_item > 0 {
+                self.first_item -= 1
+            }
         }
     }
 }
@@ -451,11 +472,20 @@ fn print_options(
 ) -> anyhow::Result<()> {
     stderr.queue(Clear(ClearType::FromCursorDown))?;
     let selected_usize = usize::from(state.selected);
-    for (i, option) in options.iter().take(MAX_OPTIONS_SHOWN).enumerate() {
+    let first_item = usize::from(state.first_item);
+    for (i, option) in options
+        .iter()
+        .skip(first_item)
+        .take(MAX_OPTIONS_SHOWN)
+        .enumerate()
+    {
         if i > 0 {
             stderr.queue(cursor::MoveToNextLine(1))?;
         }
-        if i == selected_usize {
+        // i is the index of the displayed items, but selected is the
+        // index of the selected option in the list of all options add
+        // first_item to reconcile that
+        if i + first_item == selected_usize {
             stderr
                 .queue(style::SetForegroundColor(Color::DarkCyan))?
                 .queue(style::Print("> "))?
@@ -509,7 +539,8 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a [String]) -> anyhow::Result<
 
     let items_shown = 10.min(options.len());
     let input_start = u16::try_from(prompt.len() + 1)?;
-    let mut state = SelectionState::new(u16::try_from(items_shown)?, input_start, 0);
+    let max_items = u16::try_from(options.len())? - 1;
+    let mut state = SelectionState::new(u16::try_from(items_shown)?, input_start, 0, max_items);
 
     enable_raw_mode()?;
 
