@@ -8,6 +8,7 @@ use crate::config::Config;
 use crate::git;
 use crate::git::determine_repo_root_dir;
 use crate::notes::format_note_path;
+use crate::notes::note_template;
 use crate::notes::DailyNoteSpecifier;
 use crate::prompts::basic_prompt;
 use crate::prompts::boolean_prompt;
@@ -181,10 +182,16 @@ pub fn open_daily_note(
     note_to_open: DailyNoteSpecifier,
     context: &mut Context,
 ) -> anyhow::Result<()> {
-    let notes_subpath = format_note_path(note_to_open)?;
+    let notes_subpath = format_note_path(&note_to_open);
     let mut notes_file = context.config.notes_directory_path()?;
     notes_file.push(notes_subpath);
     fs::create_dir_all(notes_file.parent().unwrap())?;
+
+    if !notes_file.exists() {
+        let template = note_template(&note_to_open);
+        fs::write(&notes_file, template)?;
+    }
+
     context
         .shell_actions
         .push(ShellAction::EditFile { path: notes_file });
