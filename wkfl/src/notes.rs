@@ -11,7 +11,7 @@ pub enum DailyNoteSpecifier {
     Tomorrow,
 }
 
-const DAILY_NOTE_FORMAT: &[BorrowedFormatItem] = format_description!("daily/[year repr:last_two]/[week_number repr:sunday]/[weekday repr:short]_[month repr:short]_[day].md");
+const DAILY_NOTE_FORMAT: &[BorrowedFormatItem] = format_description!("daily/[year repr:full]/[week_number repr:sunday]/[weekday repr:short]_[month repr:short]_[day].md");
 
 pub fn format_note_path(note_specifier: DailyNoteSpecifier) -> Result<String, error::Format> {
     let cur_time: OffsetDateTime = SystemTime::now().into();
