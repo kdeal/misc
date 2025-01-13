@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::{self, Stderr, Write};
 
 use anyhow::bail;
 use crossterm::{
@@ -546,25 +546,47 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a [String]) -> anyhow::Result<
     let max_items = u16::try_from(options.len())? - 1;
     let mut state = SelectionState::new(u16::try_from(items_shown)?, input_start, 0, max_items);
 
-    enable_raw_mode()?;
-
     // Make room for the options to be printed and return to input line
     eprint!("{}", "\n".repeat(items_shown));
     stderr.queue(cursor::MoveUp(state.items_shown))?;
 
+    enable_raw_mode()?;
+
+    let result = select_prompt_inner(prompt, options, &mut state, &mut stderr);
+
+    disable_raw_mode()?;
+
+    stderr
+        // Leave the prompt line, but clear the rest
+        .queue(cursor::MoveTo(0, state.prompt_state.input_row + 1))?
+        .queue(Clear(ClearType::FromCursorDown))?
+        .flush()?;
+
+    result
+}
+
+/// This contains all the code that prints content past the input prompt. We
+/// split this out, so that we properly clean up  and clear all the lines after
+/// the input prompt
+fn select_prompt_inner<'a>(
+    prompt: &str,
+    options: &'a [String],
+    state: &mut SelectionState,
+    stderr: &mut Stderr,
+) -> anyhow::Result<&'a str> {
     let (_, position_row) = cursor::position()?;
     // Move from prompt to first line of options
     stderr.queue(cursor::MoveToNextLine(1))?;
-    print_options(&state, &options.iter().collect(), &mut stderr)?;
+    print_options(state, &options.iter().collect(), stderr)?;
     state.prompt_state.input_row = position_row;
-    update_cursor(&state.prompt_state, &mut stderr)?;
+    update_cursor(&state.prompt_state, stderr)?;
     stderr.flush()?;
 
     while let Event::Key(KeyEvent {
         code, modifiers, ..
     }) = event::read()?
     {
-        if select_handle_key(&mut state, code, modifiers)? {
+        if select_handle_key(state, code, modifiers)? {
             break;
         }
 
@@ -576,25 +598,20 @@ pub fn select_prompt<'a>(prompt: &str, options: &'a [String]) -> anyhow::Result<
             state.update_max_index(new_num_items - 1, true);
         }
 
-        print_prompt_input(&state.prompt_state, &mut stderr)?;
+        print_prompt_input(&state.prompt_state, stderr)?;
         stderr.queue(cursor::MoveToNextLine(1))?;
-        print_options(&state, &filtered_options, &mut stderr)?;
-        update_cursor(&state.prompt_state, &mut stderr)?;
+        print_options(state, &filtered_options, stderr)?;
+        update_cursor(&state.prompt_state, stderr)?;
         stderr.flush()?;
     }
-    stderr
-        .queue(cursor::MoveTo(
-            state.prompt_state.input_start,
-            state.prompt_state.input_row,
-        ))?
-        .queue(Clear(ClearType::FromCursorDown))?
-        .flush()?;
-    disable_raw_mode()?;
 
     let filtered_options = filter_options(&state.prompt_state.line, options);
     let result = filtered_options[usize::from(state.selected)];
-    let result_output = format!("{}\n", &result);
-    stderr.execute(PrintStyledContent(result_output.with(Color::Cyan)))?;
+    let result_output = format!("{} {}\n", prompt, &result);
+    stderr
+        .queue(cursor::MoveTo(0, state.prompt_state.input_row))?
+        .queue(PrintStyledContent(result_output.with(Color::Cyan)))?
+        .flush()?;
     Ok(result)
 }
 
