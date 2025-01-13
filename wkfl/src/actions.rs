@@ -10,6 +10,7 @@ use crate::git::determine_repo_root_dir;
 use crate::notes::format_note_path;
 use crate::notes::note_template;
 use crate::notes::DailyNoteSpecifier;
+use crate::notes::NoteSpecifier;
 use crate::prompts::basic_prompt;
 use crate::prompts::boolean_prompt;
 use crate::prompts::select_prompt;
@@ -179,9 +180,26 @@ pub fn select(prompt: &str) -> anyhow::Result<()> {
 }
 
 pub fn open_daily_note(
-    note_to_open: DailyNoteSpecifier,
+    daily_note_to_open: DailyNoteSpecifier,
     context: &mut Context,
 ) -> anyhow::Result<()> {
+    open_note(
+        NoteSpecifier::Daily {
+            day: daily_note_to_open,
+        },
+        context,
+    )
+}
+
+pub fn open_topic_note(maybe_name: Option<String>, context: &mut Context) -> anyhow::Result<()> {
+    let name = match maybe_name {
+        Some(name) => name,
+        None => basic_prompt("Topic Name:")?,
+    };
+    open_note(NoteSpecifier::Topic { name }, context)
+}
+
+fn open_note(note_to_open: NoteSpecifier, context: &mut Context) -> anyhow::Result<()> {
     let notes_subpath = format_note_path(&note_to_open);
     let mut notes_file = context.config.notes_directory_path()?;
     notes_file.push(notes_subpath);

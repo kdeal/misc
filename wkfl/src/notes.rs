@@ -4,10 +4,17 @@ use time::macros::format_description;
 use time::Date;
 use time::OffsetDateTime;
 
+use crate::utils::to_title_case;
+
 pub enum DailyNoteSpecifier {
     Yesterday,
     Today,
     Tomorrow,
+}
+
+pub enum NoteSpecifier {
+    Daily { day: DailyNoteSpecifier },
+    Topic { name: String },
 }
 
 const DAILY_NOTE_FORMAT: &[BorrowedFormatItem] = format_description!("daily/[year repr:full]/[week_number repr:sunday]/[weekday repr:short]_[month repr:short]_[day].md");
@@ -23,6 +30,14 @@ fn get_day_suffix<'a>(day: u8) -> &'a str {
     }
 }
 
+fn get_path_for_topic(topic_name: &str) -> String {
+    let name_in_path = topic_name
+        .to_lowercase()
+        .replace(" ", "_")
+        .replace("-", "_");
+    format!("topics/{}.md", name_in_path)
+}
+
 fn date_from_note_specifier(note_specifier: &DailyNoteSpecifier) -> Date {
     let cur_time: OffsetDateTime = SystemTime::now().into();
     let cur_date: Date = cur_time.date();
@@ -35,15 +50,23 @@ fn date_from_note_specifier(note_specifier: &DailyNoteSpecifier) -> Date {
     }
 }
 
-pub fn format_note_path(note_specifier: &DailyNoteSpecifier) -> String {
-    date_from_note_specifier(note_specifier)
-        .format(DAILY_NOTE_FORMAT)
-        .unwrap()
+pub fn format_note_path(note_specifier: &NoteSpecifier) -> String {
+    match note_specifier {
+        NoteSpecifier::Topic { name } => get_path_for_topic(name),
+        NoteSpecifier::Daily { day } => date_from_note_specifier(day)
+            .format(DAILY_NOTE_FORMAT)
+            .unwrap(),
+    }
 }
 
-pub fn note_template(note_specifier: &DailyNoteSpecifier) -> String {
-    let date = date_from_note_specifier(note_specifier);
-    let date_str = date.format(DAILY_NOTE_TITLE_FORMAT).unwrap();
-    let day_suffix = get_day_suffix(date.day());
-    format!("# {}{}\n\n## ", date_str, day_suffix)
+pub fn note_template(note_specifier: &NoteSpecifier) -> String {
+    match note_specifier {
+        NoteSpecifier::Daily { day } => {
+            let date = date_from_note_specifier(day);
+            let date_str = date.format(DAILY_NOTE_TITLE_FORMAT).unwrap();
+            let day_suffix = get_day_suffix(date.day());
+            format!("# {}{}\n\n## ", date_str, day_suffix)
+        }
+        NoteSpecifier::Topic { name } => format!("# {}", to_title_case(name)),
+    }
 }
