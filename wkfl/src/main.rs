@@ -52,6 +52,7 @@ enum NotesCommands {
     Yesterday,
     Today,
     Tomorrow,
+    Topic { name: Option<String> },
 }
 
 pub struct Context {
@@ -114,6 +115,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             NotesCommands::Tomorrow => {
                 actions::open_daily_note(DailyNoteSpecifier::Tomorrow, &mut context)?
             }
+            NotesCommands::Topic { name } => actions::open_topic_note(name, &mut context)?,
         },
     };
 
