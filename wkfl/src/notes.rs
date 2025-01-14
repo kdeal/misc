@@ -15,6 +15,7 @@ pub enum DailyNoteSpecifier {
 pub enum NoteSpecifier {
     Daily { day: DailyNoteSpecifier },
     Topic { name: String },
+    Person { who: String },
 }
 
 const DAILY_NOTE_FORMAT: &[BorrowedFormatItem] = format_description!("daily/[year repr:full]/[week_number repr:sunday]/[weekday repr:short]_[month repr:short]_[day].md");
@@ -38,6 +39,14 @@ fn get_path_for_topic(topic_name: &str) -> String {
     format!("topics/{}.md", name_in_path)
 }
 
+fn get_path_for_person(topic_name: &str) -> String {
+    let name_in_path = topic_name
+        .to_lowercase()
+        .replace(" ", "_")
+        .replace("-", "_");
+    format!("people/{}.md", name_in_path)
+}
+
 fn date_from_note_specifier(note_specifier: &DailyNoteSpecifier) -> Date {
     let cur_time: OffsetDateTime = SystemTime::now().into();
     let cur_date: Date = cur_time.date();
@@ -56,6 +65,7 @@ pub fn format_note_path(note_specifier: &NoteSpecifier) -> String {
         NoteSpecifier::Daily { day } => date_from_note_specifier(day)
             .format(DAILY_NOTE_FORMAT)
             .unwrap(),
+        NoteSpecifier::Person { who } => get_path_for_person(who),
     }
 }
 
@@ -68,5 +78,6 @@ pub fn note_template(note_specifier: &NoteSpecifier) -> String {
             format!("# {}{}\n\n## ", date_str, day_suffix)
         }
         NoteSpecifier::Topic { name } => format!("# {}", to_title_case(name)),
+        NoteSpecifier::Person { who } => format!("# {}", who),
     }
 }
