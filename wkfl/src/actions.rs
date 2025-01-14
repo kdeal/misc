@@ -199,6 +199,14 @@ pub fn open_topic_note(maybe_name: Option<String>, context: &mut Context) -> any
     open_note(NoteSpecifier::Topic { name }, context)
 }
 
+pub fn open_person_note(maybe_who: Option<String>, context: &mut Context) -> anyhow::Result<()> {
+    let who = match maybe_who {
+        Some(who) => who,
+        None => basic_prompt("Who:")?,
+    };
+    open_note(NoteSpecifier::Person { who }, context)
+}
+
 fn open_note(note_to_open: NoteSpecifier, context: &mut Context) -> anyhow::Result<()> {
     let notes_subpath = format_note_path(&note_to_open);
     let mut notes_file = context.config.notes_directory_path()?;

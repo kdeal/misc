@@ -53,6 +53,7 @@ enum NotesCommands {
     Today,
     Tomorrow,
     Topic { name: Option<String> },
+    Person { who: Option<String> },
 }
 
 pub struct Context {
@@ -116,6 +117,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 actions::open_daily_note(DailyNoteSpecifier::Tomorrow, &mut context)?
             }
             NotesCommands::Topic { name } => actions::open_topic_note(name, &mut context)?,
+            NotesCommands::Person { who } => actions::open_person_note(who, &mut context)?,
         },
     };
 
