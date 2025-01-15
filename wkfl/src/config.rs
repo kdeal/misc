@@ -12,6 +12,7 @@ pub struct Config {
     #[serde(default = "default_repo_base_dir")]
     repositories_directory: String,
     notes_directory: Option<String>,
+    pub perplexit_api_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

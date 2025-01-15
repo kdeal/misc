@@ -6,6 +6,7 @@ use notes::DailyNoteSpecifier;
 mod actions;
 mod config;
 mod git;
+mod llm;
 mod notes;
 mod prompts;
 mod repositories;
@@ -45,6 +46,10 @@ enum Commands {
         #[command(subcommand)]
         command: NotesCommands,
     },
+    LLM {
+        #[command(subcommand)]
+        command: LLMCommands,
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -54,6 +59,11 @@ enum NotesCommands {
     Tomorrow,
     Topic { name: Option<String> },
     Person { who: Option<String> },
+}
+
+#[derive(Subcommand, Debug)]
+enum LLMCommands {
+    Perplexity { query: Option<String> },
 }
 
 pub struct Context {
@@ -118,6 +128,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             NotesCommands::Topic { name } => actions::open_topic_note(name, &mut context)?,
             NotesCommands::Person { who } => actions::open_person_note(who, &mut context)?,
+        },
+        Commands::LLM {
+            command: llm_command,
+        } => match llm_command {
+            LLMCommands::Perplexity { query } => actions::run_perplexity_query(query, context.config)?,
         },
     };
 
