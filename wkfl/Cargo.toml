@@ -17,4 +17,5 @@ log = "0.4.22"
 serde = { version = "1.0.217", features = ["derive"] }
 time = { version = "0.3.37", features = ["formatting", "macros", "parsing"] }
 toml = "0.8.19"
+ureq = { version = "2.12.1", features = ["json", "gzip"] }
 url = "2.5.2"
