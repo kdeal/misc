@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 pub mod anthropic;
 pub mod perplexity;
 
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
