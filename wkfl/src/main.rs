@@ -46,10 +46,10 @@ enum Commands {
         #[command(subcommand)]
         command: NotesCommands,
     },
-    LLM {
+    Llm {
         #[command(subcommand)]
-        command: LLMCommands,
-    }
+        command: LlmCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -62,7 +62,7 @@ enum NotesCommands {
 }
 
 #[derive(Subcommand, Debug)]
-enum LLMCommands {
+enum LlmCommands {
     Anthropic { query: Option<String> },
     Perplexity { query: Option<String> },
 }
@@ -130,11 +130,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             NotesCommands::Topic { name } => actions::open_topic_note(name, &mut context)?,
             NotesCommands::Person { who } => actions::open_person_note(who, &mut context)?,
         },
-        Commands::LLM {
+        Commands::Llm {
             command: llm_command,
         } => match llm_command {
-            LLMCommands::Perplexity { query } => actions::run_perplexity_query(query, context.config)?,
-            LLMCommands::Anthropic { query } => actions::run_anthropic_query(query, context.config)?,
+            LlmCommands::Perplexity { query } => {
+                actions::run_perplexity_query(query, context.config)?
+            }
+            LlmCommands::Anthropic { query } => {
+                actions::run_anthropic_query(query, context.config)?
+            }
         },
     };
 

@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use ureq::Agent;
 
 use super::Message;
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub enum PerplexityModel {
     #[serde(rename = "llama-3.1-sonar-small-128k-online")]
@@ -13,7 +13,6 @@ pub enum PerplexityModel {
     #[serde(rename = "llama-3.1-sonar-huge-128k-online")]
     Llama31SonarHuge,
 }
-
 
 #[derive(Debug, Default, Serialize)]
 pub struct PerplexityRequest {
@@ -37,6 +36,7 @@ pub struct PerplexityRequest {
     pub top_p: Option<f32>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct Choice {
     pub message: Message,
@@ -44,6 +44,7 @@ pub struct Choice {
     pub index: i32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct Usage {
     pub completion_tokens: i32,
@@ -51,6 +52,7 @@ pub struct Usage {
     pub total_tokens: i32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct PerplexityResponse {
     pub choices: Vec<Choice>,
@@ -67,9 +69,7 @@ pub struct PerplexityClient {
 
 impl PerplexityClient {
     pub fn new(api_key: String) -> Self {
-        Self {
-            api_key,
-        }
+        Self { api_key }
     }
 
     pub fn create_chat_completion(

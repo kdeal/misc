@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::error::Error;
-use ureq::{Agent, AgentBuilder};
 
 use super::{Message, Role};
 
+#[allow(dead_code)]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub enum AnthropicModel {
     #[serde(alias = "claude-3-5-haiku-20241022")]
@@ -32,6 +31,7 @@ pub struct AnthropicRequest {
     pub stream: Option<bool>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct ContentBlock {
     #[serde(rename = "type")]
@@ -39,12 +39,14 @@ pub struct ContentBlock {
     pub text: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct Usage {
     pub input_tokens: i32,
     pub output_tokens: i32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct AnthropicResponse {
     pub id: String,
@@ -61,9 +63,7 @@ pub struct AnthropicClient {
 
 impl AnthropicClient {
     pub fn new(api_key: String) -> Self {
-        Self {
-            api_key,
-        }
+        Self { api_key }
     }
 
     pub fn create_chat_completion(
