@@ -4,11 +4,11 @@ use std::fs;
 use std::io;
 use url::Url;
 
-use crate::config;
 use crate::config::get_repo_config;
 use crate::config::Config;
 use crate::git;
 use crate::git::determine_repo_root_dir;
+use crate::llm;
 use crate::llm::perplexity;
 use crate::notes::format_note_path;
 use crate::notes::note_template;
@@ -240,13 +240,12 @@ pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyh
         .perplexit_api_key
         .ok_or(anyhow!("Missing perplexit_api_key in config"))?;
     let client = perplexity::PerplexityClient::new(api_key);
-    let result = client.create_chat_completion(perplexity::ChatCompletionRequest {
-        model: "llama-3.1-sonar-large-128k-online".to_string(),
-        messages: vec![perplexity::Message {
-            role: "user".to_string(),
+    let result = client.create_chat_completion(perplexity::PerplexityRequest {
+        messages: vec![llm::Message {
+            role: llm::Role::User,
             content: query,
         }],
-        ..perplexity::ChatCompletionRequest::default()
+        ..perplexity::PerplexityRequest::default()
     })?;
     let mut citation_text = String::new();
     if let Some(citations) = result.citations {
