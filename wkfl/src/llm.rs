@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+pub mod anthropic;
 pub mod perplexity;
 
 

@@ -62,14 +62,12 @@ pub struct PerplexityResponse {
 }
 
 pub struct PerplexityClient {
-    agent: Agent,
     api_key: String,
 }
 
 impl PerplexityClient {
     pub fn new(api_key: String) -> Self {
         Self {
-            agent: Agent::new(),
             api_key,
         }
     }
@@ -78,8 +76,7 @@ impl PerplexityClient {
         &self,
         request: PerplexityRequest,
     ) -> anyhow::Result<PerplexityResponse> {
-        let response = self.agent
-            .post("https://api.perplexity.ai/chat/completions")
+        let response = ureq::post("https://api.perplexity.ai/chat/completions")
             .set("Authorization", &format!("Bearer {}", self.api_key))
             .set("Content-Type", "application/json")
             .send_json(&request)?;
