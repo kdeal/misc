@@ -9,6 +9,7 @@ use crate::config::Config;
 use crate::git;
 use crate::git::determine_repo_root_dir;
 use crate::llm;
+use crate::llm::anthropic;
 use crate::llm::perplexity;
 use crate::notes::format_note_path;
 use crate::notes::note_template;
@@ -237,8 +238,8 @@ pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyh
         None => basic_prompt("Query:")?,
     };
     let api_key = config
-        .perplexit_api_key
-        .ok_or(anyhow!("Missing perplexit_api_key in config"))?;
+        .perplexity_api_key
+        .ok_or(anyhow!("Missing perplexity_api_key in config"))?;
     let client = perplexity::PerplexityClient::new(api_key);
     let result = client.create_chat_completion(perplexity::PerplexityRequest {
         messages: vec![llm::Message {
@@ -260,5 +261,26 @@ pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyh
         );
     }
     println!("{}{}", citation_text, result.choices[0].message.content);
+    Ok(())
+}
+
+pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+    let query = match maybe_query {
+        Some(query) => query,
+        None => basic_prompt("Query:")?,
+    };
+    let api_key = config
+        .anthropic_api_key
+        .ok_or(anyhow!("Missing anthropic_api_key in config"))?;
+    let client = anthropic::AnthropicClient::new(api_key);
+    let result = client.create_chat_completion(anthropic::AnthropicRequest {
+        messages: vec![llm::Message {
+            role: llm::Role::User,
+            content: query,
+        }],
+        max_tokens: 1024,
+        ..anthropic::AnthropicRequest::default()
+    })?;
+    println!("{}", result.content[0].text);
     Ok(())
 }

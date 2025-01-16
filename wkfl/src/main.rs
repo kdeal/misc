@@ -63,6 +63,7 @@ enum NotesCommands {
 
 #[derive(Subcommand, Debug)]
 enum LLMCommands {
+    Anthropic { query: Option<String> },
     Perplexity { query: Option<String> },
 }
 
@@ -133,6 +134,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             command: llm_command,
         } => match llm_command {
             LLMCommands::Perplexity { query } => actions::run_perplexity_query(query, context.config)?,
+            LLMCommands::Anthropic { query } => actions::run_anthropic_query(query, context.config)?,
         },
     };
 
