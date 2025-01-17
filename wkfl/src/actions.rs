@@ -11,6 +11,7 @@ use crate::git::determine_repo_root_dir;
 use crate::llm;
 use crate::llm::anthropic;
 use crate::llm::perplexity;
+use crate::llm::vertex_ai;
 use crate::notes::format_note_path;
 use crate::notes::note_template;
 use crate::notes::DailyNoteSpecifier;
@@ -282,5 +283,29 @@ pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyho
         ..anthropic::AnthropicRequest::default()
     })?;
     println!("{}", result.content[0].text);
+    Ok(())
+}
+
+pub fn run_vertex_ai_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+    let query = match maybe_query {
+        Some(query) => query,
+        None => basic_prompt("Query:")?,
+    };
+    let vertex_ai_config = config
+        .vertex_ai
+        .ok_or(anyhow!("Missing vertex_ai in config"))?;
+    let client =
+        vertex_ai::VertexAiClient::new(vertex_ai_config.api_key, vertex_ai_config.project_id);
+    let result = client.create_chat_completion(
+        vertex_ai::VertexAiRequest {
+            contents: vec![vertex_ai::Content {
+                role: Some(vertex_ai::Role::User),
+                parts: vec![vertex_ai::Part { text: query }],
+            }],
+            ..vertex_ai::VertexAiRequest::default()
+        },
+        vertex_ai::VertexAiModel::default(),
+    )?;
+    println!("{}", result.candidates[0].content.parts[0].text);
     Ok(())
 }

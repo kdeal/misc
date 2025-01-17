@@ -8,6 +8,12 @@ use home::home_dir;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+pub struct VertexAiConfig {
+    pub api_key: String,
+    pub project_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
     #[serde(default = "default_repo_base_dir")]
     repositories_directory: String,
@@ -15,6 +21,7 @@ pub struct Config {
 
     pub anthropic_api_key: Option<String>,
     pub perplexity_api_key: Option<String>,
+    pub vertex_ai: Option<VertexAiConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
