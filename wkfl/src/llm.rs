@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod anthropic;
 pub mod perplexity;
+pub mod vertex_ai;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

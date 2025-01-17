@@ -1251,6 +1251,7 @@ dependencies = [
  "home",
  "log",
  "serde",
+ "serde_json",
  "time",
  "toml",
  "ureq",
