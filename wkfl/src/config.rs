@@ -44,7 +44,7 @@ impl Config {
     }
     pub fn notes_directory_path(&self) -> anyhow::Result<PathBuf> {
         if let Some(notes_directory) = &self.notes_directory {
-            create_path_from_string(&notes_directory)
+            create_path_from_string(notes_directory)
         } else {
             let mut notes_directory_path = self.repositories_directory_path()?;
             notes_directory_path.push("notes");
