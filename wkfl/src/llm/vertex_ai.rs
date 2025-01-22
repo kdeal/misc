@@ -2,10 +2,11 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fmt;
 
-#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub enum VertexAiModel {
     #[default]
+    #[serde(rename = "gemini-2.0-flash-exp")]
+    Gemini20Flash,
     #[serde(rename = "gemini-1.5-flash-002")]
     Gemini15Flash,
     #[serde(rename = "gemini-1.5-pro-002")]
