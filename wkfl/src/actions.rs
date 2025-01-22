@@ -5,6 +5,7 @@ use std::io;
 use url::Url;
 
 use crate::config::get_repo_config;
+use crate::config::resolve_secret;
 use crate::config::Config;
 use crate::git;
 use crate::git::determine_repo_root_dir;
@@ -238,9 +239,10 @@ pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyh
         Some(query) => query,
         None => basic_prompt("Query:")?,
     };
-    let api_key = config
+    let api_key_raw = config
         .perplexity_api_key
         .ok_or(anyhow!("Missing perplexity_api_key in config"))?;
+    let api_key = resolve_secret(&api_key_raw)?;
     let client = perplexity::PerplexityClient::new(api_key);
     let result = client.create_chat_completion(perplexity::PerplexityRequest {
         messages: vec![llm::Message {
@@ -270,9 +272,10 @@ pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyho
         Some(query) => query,
         None => basic_prompt("Query:")?,
     };
-    let api_key = config
+    let api_key_raw = config
         .anthropic_api_key
         .ok_or(anyhow!("Missing anthropic_api_key in config"))?;
+    let api_key = resolve_secret(&api_key_raw)?;
     let client = anthropic::AnthropicClient::new(api_key);
     let result = client.create_chat_completion(anthropic::AnthropicRequest {
         messages: vec![llm::Message {
@@ -294,8 +297,8 @@ pub fn run_vertex_ai_query(maybe_query: Option<String>, config: Config) -> anyho
     let vertex_ai_config = config
         .vertex_ai
         .ok_or(anyhow!("Missing vertex_ai in config"))?;
-    let client =
-        vertex_ai::VertexAiClient::new(vertex_ai_config.api_key, vertex_ai_config.project_id);
+    let api_key = resolve_secret(&vertex_ai_config.api_key)?;
+    let client = vertex_ai::VertexAiClient::new(api_key, vertex_ai_config.project_id);
     let result = client.create_chat_completion(
         vertex_ai::VertexAiRequest {
             contents: vec![vertex_ai::Content {
