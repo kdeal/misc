@@ -55,7 +55,7 @@ enum Commands {
     },
     Completion {
         language: Option<Shell>,
-    }
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -65,11 +65,11 @@ enum NotesCommands {
     Tomorrow,
     Topic {
         #[arg(value_hint = ValueHint::Other)]
-        name: Option<String>
+        name: Option<String>,
     },
     Person {
         #[arg(value_hint = ValueHint::Other)]
-        who: Option<String>
+        who: Option<String>,
     },
 }
 
@@ -77,15 +77,15 @@ enum NotesCommands {
 enum LlmCommands {
     Anthropic {
         #[arg(value_hint = ValueHint::Other)]
-        query: Option<String>
+        query: Option<String>,
     },
     Perplexity {
         #[arg(value_hint = ValueHint::Other)]
-        query: Option<String>
+        query: Option<String>,
     },
     VertexAi {
         #[arg(value_hint = ValueHint::Other)]
-        query: Option<String>
+        query: Option<String>,
     },
 }
 
@@ -168,7 +168,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let bin_name = cmd.get_name().to_string();
             let shell = language.unwrap_or(Shell::from_env().unwrap_or(Shell::Bash));
             generate(shell, &mut cmd, bin_name, &mut io::stdout());
-        },
+        }
     };
 
     if let Some(shell_actions_file) = cli.shell_actions_file {
