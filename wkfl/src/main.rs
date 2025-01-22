@@ -1,6 +1,7 @@
-use std::{env, error::Error, path::PathBuf};
+use std::{env, error::Error, io, path::PathBuf};
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use clap_complete::{generate, Shell};
 use notes::DailyNoteSpecifier;
 
 mod actions;
@@ -19,7 +20,7 @@ mod utils;
 struct Cli {
     #[arg(short, long)]
     verbose: bool,
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::FilePath)]
     shell_actions_file: Option<PathBuf>,
     #[command(subcommand)]
     command: Commands,
@@ -35,11 +36,13 @@ enum Commands {
     Config,
     Clone,
     Confirm {
+        #[arg(value_hint = ValueHint::Other)]
         prompt: Option<String>,
         #[arg(short = 't', long)]
         default_true: bool,
     },
     Select {
+        #[arg(value_hint = ValueHint::Other)]
         prompt: Option<String>,
     },
     Notes {
@@ -50,6 +53,9 @@ enum Commands {
         #[command(subcommand)]
         command: LlmCommands,
     },
+    Completion {
+        language: Option<Shell>,
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -57,15 +63,30 @@ enum NotesCommands {
     Yesterday,
     Today,
     Tomorrow,
-    Topic { name: Option<String> },
-    Person { who: Option<String> },
+    Topic {
+        #[arg(value_hint = ValueHint::Other)]
+        name: Option<String>
+    },
+    Person {
+        #[arg(value_hint = ValueHint::Other)]
+        who: Option<String>
+    },
 }
 
 #[derive(Subcommand, Debug)]
 enum LlmCommands {
-    Anthropic { query: Option<String> },
-    Perplexity { query: Option<String> },
-    VertexAi { query: Option<String> },
+    Anthropic {
+        #[arg(value_hint = ValueHint::Other)]
+        query: Option<String>
+    },
+    Perplexity {
+        #[arg(value_hint = ValueHint::Other)]
+        query: Option<String>
+    },
+    VertexAi {
+        #[arg(value_hint = ValueHint::Other)]
+        query: Option<String>
+    },
 }
 
 pub struct Context {
@@ -141,6 +162,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 actions::run_anthropic_query(query, context.config)?
             }
             LlmCommands::VertexAi { query } => actions::run_vertex_ai_query(query, context.config)?,
+        },
+        Commands::Completion { language } => {
+            let mut cmd = Cli::command();
+            let bin_name = cmd.get_name().to_string();
+            let shell = language.unwrap_or(Shell::from_env().unwrap_or(Shell::Bash));
+            generate(shell, &mut cmd, bin_name, &mut io::stdout());
         },
     };
 
