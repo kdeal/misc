@@ -2,16 +2,12 @@ use serde::{Deserialize, Serialize};
 
 use super::Message;
 
-#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum PerplexityModel {
-    #[serde(rename = "llama-3.1-sonar-small-128k-online")]
-    Llama31SonarSmall,
     #[default]
-    #[serde(rename = "llama-3.1-sonar-large-128k-online")]
-    Llama31SonarLarge,
-    #[serde(rename = "llama-3.1-sonar-huge-128k-online")]
-    Llama31SonarHuge,
+    Sonar,
+    SonarPro,
 }
 
 #[derive(Debug, Default, Serialize)]
