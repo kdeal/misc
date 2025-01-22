@@ -235,10 +235,7 @@ pub fn print_config(config: Config) {
 }
 
 pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
-    let query = match maybe_query {
-        Some(query) => query,
-        None => basic_prompt("Query:")?,
-    };
+    let query = llm::get_query(maybe_query)?;
     let api_key_raw = config
         .perplexity_api_key
         .ok_or(anyhow!("Missing perplexity_api_key in config"))?;
@@ -268,10 +265,7 @@ pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyh
 }
 
 pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
-    let query = match maybe_query {
-        Some(query) => query,
-        None => basic_prompt("Query:")?,
-    };
+    let query = llm::get_query(maybe_query)?;
     let api_key_raw = config
         .anthropic_api_key
         .ok_or(anyhow!("Missing anthropic_api_key in config"))?;
@@ -290,10 +284,7 @@ pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyho
 }
 
 pub fn run_vertex_ai_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
-    let query = match maybe_query {
-        Some(query) => query,
-        None => basic_prompt("Query:")?,
-    };
+    let query = llm::get_query(maybe_query)?;
     let vertex_ai_config = config
         .vertex_ai
         .ok_or(anyhow!("Missing vertex_ai in config"))?;
