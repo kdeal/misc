@@ -1,8 +1,10 @@
 use std::{
     fs::read_to_string,
     path::{Path, PathBuf},
+    process::Command,
 };
 
+use anyhow::{bail, Context, Ok};
 use home::home_dir;
 
 use serde::{Deserialize, Serialize};
@@ -67,7 +69,37 @@ fn create_path_from_string(path_str: &str) -> anyhow::Result<PathBuf> {
     } else {
         Ok(PathBuf::from(path_str))
     }
+}
 
+pub fn resolve_secret(config_value: &str) -> anyhow::Result<String> {
+    if config_value.starts_with("cmd::") {
+        let cmd = config_value
+            .strip_prefix("cmd::")
+            .expect("We check the prefix above, so this shouldn't fail");
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .with_context(|| format!("Failed to run command: {}", cmd))?;
+        if !output.status.success() {
+            bail!("Command failed: {}", cmd);
+        }
+        let cmd_output = String::from_utf8(output.stdout)
+            .with_context(|| "Failed to parse result of cmd as utf".to_string())?;
+        Ok(cmd_output.trim().to_string())
+    } else if config_value.starts_with("env::") {
+        let env_var = config_value
+            .strip_prefix("env::")
+            .expect("We check the prefix above, so this shouldn't fail");
+        std::env::var(env_var).with_context(|| format!("{} env var doesn't exist", env_var))
+    } else if config_value.starts_with("val::") {
+        let value = config_value
+            .strip_prefix("val::")
+            .expect("We check the prefix above, so this shouldn't fail");
+        Ok(value.to_string())
+    } else {
+        Ok(config_value.to_string())
+    }
 }
 
 pub fn get_config() -> anyhow::Result<Config> {
