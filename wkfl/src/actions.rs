@@ -20,6 +20,7 @@ use crate::notes::NoteSpecifier;
 use crate::prompts::basic_prompt;
 use crate::prompts::boolean_prompt;
 use crate::prompts::select_prompt;
+use crate::prompts::Link;
 use crate::repositories::get_repositories_in_directory;
 use crate::shell_actions::ShellAction;
 use crate::utils;
@@ -283,23 +284,34 @@ pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyho
     Ok(())
 }
 
-pub fn run_vertex_ai_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+pub fn run_vertex_ai_query(
+    maybe_query: Option<String>,
+    enable_search: bool,
+    config: Config,
+) -> anyhow::Result<()> {
     let query = llm::get_query(maybe_query)?;
     let vertex_ai_config = config
         .vertex_ai
         .ok_or(anyhow!("Missing vertex_ai in config"))?;
     let api_key = resolve_secret(&vertex_ai_config.api_key)?;
     let client = vertex_ai::VertexAiClient::new(api_key, vertex_ai_config.project_id);
-    let result = client.create_chat_completion(
-        vertex_ai::VertexAiRequest {
-            contents: vec![vertex_ai::Content {
-                role: Some(vertex_ai::Role::User),
-                parts: vec![vertex_ai::Part { text: query }],
-            }],
-            ..vertex_ai::VertexAiRequest::default()
-        },
-        vertex_ai::VertexAiModel::default(),
-    )?;
-    println!("{}", result.candidates[0].content.parts[0].text);
+    let mut request = vertex_ai::VertexAiRequest {
+        contents: vec![vertex_ai::Content {
+            role: Some(vertex_ai::Role::User),
+            parts: vec![vertex_ai::Part { text: query }],
+        }],
+        ..vertex_ai::VertexAiRequest::default()
+    };
+    if enable_search {
+        request.tools = Some(vec![vertex_ai::GoogleSearchTool::default()]);
+    }
+    let result = client.create_chat_completion(request, vertex_ai::VertexAiModel::default())?;
+    let candidate = &result.candidates[0];
+    if let Some(grounding_metadata) = &candidate.grounding_metadata {
+        grounding_metadata.grounding_chunks.iter().enumerate().for_each(|(i, grounding_chunk)| {
+            println!("[{}] = {}", i, Link::new(&grounding_chunk.web.title, &grounding_chunk.web.uri));
+        });
+    }
+    println!("{}", candidate.content.parts[0].text);
     Ok(())
 }

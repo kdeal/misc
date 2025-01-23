@@ -86,6 +86,8 @@ enum LlmCommands {
     VertexAi {
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        #[arg(short, long)]
+        enable_search: bool,
     },
 }
 
@@ -161,7 +163,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             LlmCommands::Anthropic { query } => {
                 actions::run_anthropic_query(query, context.config)?
             }
-            LlmCommands::VertexAi { query } => actions::run_vertex_ai_query(query, context.config)?,
+            LlmCommands::VertexAi { query, enable_search } => actions::run_vertex_ai_query(query, enable_search, context.config)?,
         },
         Commands::Completion { language } => {
             let mut cmd = Cli::command();

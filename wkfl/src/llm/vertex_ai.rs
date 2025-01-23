@@ -7,6 +7,8 @@ pub enum VertexAiModel {
     #[default]
     #[serde(rename = "gemini-2.0-flash-exp")]
     Gemini20Flash,
+    #[serde(rename = "gemini-2.0-flash-thinking-exp-01-21")]
+    Gemini20FlashThinking,
     #[serde(rename = "gemini-1.5-flash-002")]
     Gemini15Flash,
     #[serde(rename = "gemini-1.5-pro-002")]
@@ -32,8 +34,20 @@ pub struct VertexAiRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_instruction: Option<Content>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<GoogleSearchTool>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub generation_config: Option<GenerationConfig>,
 }
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleSearchTool {
+    google_search: GoogleSearchOptions,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleSearchOptions {}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,39 +116,49 @@ pub struct VertexAiResponse {
 pub struct Candidate {
     pub content: Content,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub citation_metadata: Option<CitationMetadata>,
+    pub grounding_metadata: Option<GroundingMetadata>,
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CitationMetadata {
-    pub citations: Vec<Citation>,
+pub struct GroundingMetadata {
+    pub grounding_chunks: Vec<GroundingChunk>,
+    pub grounding_supports: Vec<GroundingSupport>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroundingChunk {
+    pub web: GroundingChunkWeb
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Citation {
-    pub start_index: i32,
-    pub end_index: i32,
+pub struct GroundingChunkWeb {
     pub uri: String,
     pub title: String,
-    pub license: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub publication_date: Option<PublicationDate>,
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PublicationDate {
-    pub year: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub month: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub day: Option<i32>,
+pub struct GroundingSupport {
+    pub segment: GroundingSupportSegment,
+    pub grounding_chunk_indices: Vec<u8>,
+    pub confidence_scores: Vec<f32>,
 }
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroundingSupportSegment {
+    pub start_index: i32,
+    pub end_index: i32,
+    pub text: String,
+}
+
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -168,7 +192,6 @@ impl VertexAiClient {
             .set("Authorization", &format!("Bearer {}", self.api_key))
             .set("Content-Type", "application/json")
             .send_json(&request)?;
-
         let completion = response.into_json::<VertexAiResponse>()?;
         Ok(completion)
     }
