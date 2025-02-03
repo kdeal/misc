@@ -1,12 +1,17 @@
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fmt;
+
+use crate::config::{resolve_secret, Config};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub enum VertexAiModel {
     #[default]
     #[serde(rename = "gemini-2.0-flash-exp")]
     Gemini20Flash,
+    #[serde(rename = "gemini-exp-1206")]
+    GeminiExp,
     #[serde(rename = "gemini-2.0-flash-thinking-exp-01-21")]
     Gemini20FlashThinking,
     #[serde(rename = "gemini-1.5-flash-002")]
@@ -120,7 +125,7 @@ pub struct Candidate {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroundingMetadata {
     pub grounding_chunks: Vec<GroundingChunk>,
@@ -130,15 +135,7 @@ pub struct GroundingMetadata {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroundingChunk {
-    pub web: GroundingChunkWeb
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GroundingChunkWeb {
-    pub uri: String,
-    pub title: String,
+    pub web: super::Source,
 }
 
 #[allow(dead_code)]
@@ -154,11 +151,10 @@ pub struct GroundingSupport {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroundingSupportSegment {
-    pub start_index: i32,
-    pub end_index: i32,
+    pub start_index: usize,
+    pub end_index: usize,
     pub text: String,
 }
-
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -194,5 +190,70 @@ impl VertexAiClient {
             .send_json(&request)?;
         let completion = response.into_json::<VertexAiResponse>()?;
         Ok(completion)
+    }
+}
+
+impl super::LlmProvider for VertexAiClient {
+    fn from_config(config: Config) -> anyhow::Result<Self> {
+        let vertex_ai_config = config
+            .vertex_ai
+            .ok_or(anyhow!("Missing vertex_ai in config"))?;
+        let api_key = resolve_secret(&vertex_ai_config.api_key)?;
+        Ok(Self::new(api_key, vertex_ai_config.project_id))
+    }
+}
+
+impl super::GroundedChat for VertexAiClient {
+    fn create_grounded_chat_completion(
+        &self,
+        request: super::GroundedChatRequest,
+    ) -> anyhow::Result<super::GroundedChatResponse> {
+        let vertex_request = VertexAiRequest {
+            contents: vec![Content {
+                role: Some(Role::User),
+                parts: vec![Part {
+                    text: request.query,
+                }],
+            }],
+            ..VertexAiRequest::default()
+        };
+        let model = match request.model_type {
+            super::GroundedModelType::Small => VertexAiModel::Gemini20Flash,
+            super::GroundedModelType::Large => VertexAiModel::GeminiExp,
+        };
+        let response = self.create_chat_completion(vertex_request, model)?;
+        let candidate = response
+            .candidates
+            .into_iter()
+            .nth(0)
+            .expect("It should always return a canidate");
+        let grounding_metadata = candidate
+            .grounding_metadata
+            .unwrap_or(GroundingMetadata::default());
+        let mut supports: Vec<super::Support> = grounding_metadata
+            .grounding_supports
+            .into_iter()
+            .map(|support| super::Support {
+                start_index: support.segment.start_index,
+                end_index: support.segment.end_index,
+                text: support.segment.text,
+                source_indices: support.grounding_chunk_indices,
+            })
+            .collect();
+        supports.sort_by_key(|support| support.end_index);
+        Ok(super::GroundedChatResponse {
+            message: super::Message {
+                role: super::Role::Assistant,
+                content: candidate.content.parts[0].text.clone(),
+            },
+            citations: super::CitationMetadata {
+                sources: grounding_metadata
+                    .grounding_chunks
+                    .into_iter()
+                    .map(|chunk| chunk.web)
+                    .collect(),
+                supports,
+            },
+        })
     }
 }
