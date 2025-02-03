@@ -9,6 +9,25 @@ use home::home_dir;
 
 use serde::{Deserialize, Serialize};
 
+use crate::llm::{
+    perplexity::PerplexityClient, vertex_ai::VertexAiClient, GroundedChat, LlmProvider,
+};
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum WebChatProvider {
+    VertexAI,
+    Perplexity,
+}
+
+impl WebChatProvider {
+    pub fn create_client(&self, config: Config) -> anyhow::Result<Box<dyn GroundedChat>> {
+        match self {
+            WebChatProvider::VertexAI => Ok(Box::new(VertexAiClient::from_config(config)?)),
+            WebChatProvider::Perplexity => Ok(Box::new(PerplexityClient::from_config(config)?)),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct VertexAiConfig {
     pub api_key: String,
@@ -20,6 +39,7 @@ pub struct Config {
     #[serde(default = "default_repo_base_dir")]
     repositories_directory: String,
     notes_directory: Option<String>,
+    web_chat_provider: Option<WebChatProvider>,
 
     pub anthropic_api_key: Option<String>,
     pub perplexity_api_key: Option<String>,
@@ -50,6 +70,22 @@ impl Config {
             notes_directory_path.push("notes");
             Ok(notes_directory_path)
         }
+    }
+
+    pub fn get_web_chat_provider(&self) -> Option<WebChatProvider> {
+        if self.web_chat_provider.is_some() {
+            return self.web_chat_provider.clone();
+        }
+
+        if self.perplexity_api_key.is_some() {
+            return Some(WebChatProvider::Perplexity);
+        }
+
+        if self.vertex_ai.is_some() {
+            return Some(WebChatProvider::VertexAI);
+        }
+
+        None
     }
 }
 

@@ -56,6 +56,10 @@ enum Commands {
     Completion {
         language: Option<Shell>,
     },
+    WebChat {
+        #[arg(value_hint = ValueHint::Other)]
+        query: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -163,7 +167,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             LlmCommands::Anthropic { query } => {
                 actions::run_anthropic_query(query, context.config)?
             }
-            LlmCommands::VertexAi { query, enable_search } => actions::run_vertex_ai_query(query, enable_search, context.config)?,
+            LlmCommands::VertexAi {
+                query,
+                enable_search,
+            } => actions::run_vertex_ai_query(query, enable_search, context.config)?,
         },
         Commands::Completion { language } => {
             let mut cmd = Cli::command();
@@ -171,6 +178,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let shell = language.unwrap_or(Shell::from_env().unwrap_or(Shell::Bash));
             generate(shell, &mut cmd, bin_name, &mut io::stdout());
         }
+        Commands::WebChat { query } => actions::run_web_chat(query, context.config)?,
     };
 
     if let Some(shell_actions_file) = cli.shell_actions_file {

@@ -13,6 +13,7 @@ use crate::llm;
 use crate::llm::anthropic;
 use crate::llm::perplexity;
 use crate::llm::vertex_ai;
+use crate::llm::LlmProvider;
 use crate::notes::format_note_path;
 use crate::notes::note_template;
 use crate::notes::DailyNoteSpecifier;
@@ -237,11 +238,7 @@ pub fn print_config(config: Config) {
 
 pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
     let query = llm::get_query(maybe_query)?;
-    let api_key_raw = config
-        .perplexity_api_key
-        .ok_or(anyhow!("Missing perplexity_api_key in config"))?;
-    let api_key = resolve_secret(&api_key_raw)?;
-    let client = perplexity::PerplexityClient::new(api_key);
+    let client = perplexity::PerplexityClient::from_config(config)?;
     let result = client.create_chat_completion(perplexity::PerplexityRequest {
         messages: vec![llm::Message {
             role: llm::Role::User,
@@ -290,11 +287,7 @@ pub fn run_vertex_ai_query(
     config: Config,
 ) -> anyhow::Result<()> {
     let query = llm::get_query(maybe_query)?;
-    let vertex_ai_config = config
-        .vertex_ai
-        .ok_or(anyhow!("Missing vertex_ai in config"))?;
-    let api_key = resolve_secret(&vertex_ai_config.api_key)?;
-    let client = vertex_ai::VertexAiClient::new(api_key, vertex_ai_config.project_id);
+    let client = vertex_ai::VertexAiClient::from_config(config)?;
     let mut request = vertex_ai::VertexAiRequest {
         contents: vec![vertex_ai::Content {
             role: Some(vertex_ai::Role::User),
@@ -308,10 +301,70 @@ pub fn run_vertex_ai_query(
     let result = client.create_chat_completion(request, vertex_ai::VertexAiModel::default())?;
     let candidate = &result.candidates[0];
     if let Some(grounding_metadata) = &candidate.grounding_metadata {
-        grounding_metadata.grounding_chunks.iter().enumerate().for_each(|(i, grounding_chunk)| {
-            println!("[{}] = {}", i, Link::new(&grounding_chunk.web.title, &grounding_chunk.web.uri));
-        });
+        grounding_metadata
+            .grounding_chunks
+            .iter()
+            .enumerate()
+            .for_each(|(i, grounding_chunk)| {
+                println!(
+                    "[{}] = {}",
+                    i,
+                    Link::new(&grounding_chunk.web.title, &grounding_chunk.web.uri)
+                );
+            });
     }
     println!("{}", candidate.content.parts[0].text);
+    Ok(())
+}
+
+fn number_to_superscript(number: &u8) -> String {
+    const SUPERSCRIPT_DIGITS: [&str; 10] = ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"];
+    number
+        .to_string()
+        .chars()
+        .map(|c| SUPERSCRIPT_DIGITS[c.to_digit(10).unwrap() as usize])
+        .collect()
+}
+
+fn format_citation_indices(indices: &[u8]) -> String {
+    indices
+        .iter()
+        .map(number_to_superscript)
+        .collect::<Vec<String>>()
+        .join("˒")
+}
+
+pub fn run_web_chat(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+    let query = llm::get_query(maybe_query)?;
+    let client_provider = config
+        .get_web_chat_provider()
+        .expect("No provider configured that supports web chat");
+    let client = client_provider.create_client(config)?;
+    let result = client.create_grounded_chat_completion(llm::GroundedChatRequest {
+        query,
+        model_type: llm::GroundedModelType::Large,
+    })?;
+
+    let mut last_end = 0;
+    for support in result.citations.supports.iter() {
+        let str_to_print = result.message.content[last_end..support.end_index].to_string();
+        print!(
+            "{}{}",
+            str_to_print,
+            format_citation_indices(&support.source_indices)
+        );
+        last_end = support.end_index;
+    }
+    if last_end != result.message.content.len() {
+        let str_to_print = result.message.content[last_end..].to_string();
+        print!("{}", str_to_print);
+    }
+    println!("\n");
+
+    for citation in result.citations.sources.iter() {
+        print!(" {:}", Link::new(&citation.title, &citation.uri));
+    }
+    println!();
+
     Ok(())
 }
