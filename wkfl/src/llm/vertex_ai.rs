@@ -199,6 +199,14 @@ impl VertexAiClient {
             None => super::Role::Assistant,
         }
     }
+
+    fn model_from_model_type(model_type: super::ModelType) -> VertexAiModel {
+        match model_type {
+            super::ModelType::Small => VertexAiModel::Gemini20Flash,
+            super::ModelType::Large => VertexAiModel::GeminiExp,
+            super::ModelType::Thinking => VertexAiModel::Gemini20FlashThinking,
+        }
+    }
 }
 
 impl super::LlmProvider for VertexAiClient {
@@ -225,10 +233,7 @@ impl super::GroundedChat for VertexAiClient {
             }],
             ..VertexAiRequest::default()
         };
-        let model = match request.model_type {
-            super::GroundedModelType::Small => VertexAiModel::Gemini20Flash,
-            super::GroundedModelType::Large => VertexAiModel::GeminiExp,
-        };
+        let model = Self::model_from_model_type(request.model_type);
         let response = self.create_chat_completion(vertex_request, model)?;
         let candidate = response
             .candidates
@@ -284,11 +289,7 @@ impl super::Chat for VertexAiClient {
             }],
             ..VertexAiRequest::default()
         };
-        let model = match request.model_type {
-            super::ModelType::Small => VertexAiModel::Gemini20Flash,
-            super::ModelType::Large => VertexAiModel::GeminiExp,
-            super::ModelType::Thinking => VertexAiModel::Gemini20FlashThinking,
-        };
+        let model = Self::model_from_model_type(request.model_type);
         let response = self.create_chat_completion(vertex_request, model)?;
         let candidate = response
             .candidates

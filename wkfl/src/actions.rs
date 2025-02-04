@@ -342,7 +342,7 @@ pub fn run_web_chat(maybe_query: Option<String>, config: Config) -> anyhow::Resu
     let client = client_provider.create_client(config)?;
     let result = client.create_grounded_chat_completion(llm::GroundedChatRequest {
         query,
-        model_type: llm::GroundedModelType::Large,
+        model_type: llm::ModelType::Small,
     })?;
 
     let mut last_end = 0;
