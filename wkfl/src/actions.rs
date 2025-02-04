@@ -6,7 +6,9 @@ use url::Url;
 
 use crate::config::get_repo_config;
 use crate::config::resolve_secret;
+use crate::config::ChatProvider;
 use crate::config::Config;
+use crate::config::WebChatProvider;
 use crate::git;
 use crate::git::determine_repo_root_dir;
 use crate::llm;
@@ -334,16 +336,22 @@ fn format_citation_indices(indices: &[u8]) -> String {
         .join("˒")
 }
 
-pub fn run_web_chat(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+pub fn run_web_chat(
+    maybe_query: Option<String>,
+    model_type: llm::ModelType,
+    model_provider: Option<WebChatProvider>,
+    config: Config,
+) -> anyhow::Result<()> {
     let query = llm::get_query(maybe_query)?;
-    let client_provider = config
-        .get_web_chat_provider()
-        .expect("No provider configured that supports web chat");
+    let client_provider = match model_provider {
+        Some(provider) => provider,
+        None => config
+            .get_web_chat_provider()
+            .expect("No provider configured that supports web chat"),
+    };
     let client = client_provider.create_client(config)?;
-    let result = client.create_grounded_chat_completion(llm::GroundedChatRequest {
-        query,
-        model_type: llm::ModelType::Small,
-    })?;
+    let result =
+        client.create_grounded_chat_completion(llm::GroundedChatRequest { query, model_type })?;
 
     let mut last_end = 0;
     for support in result.citations.supports.iter() {
@@ -369,16 +377,21 @@ pub fn run_web_chat(maybe_query: Option<String>, config: Config) -> anyhow::Resu
     Ok(())
 }
 
-pub fn run_chat(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+pub fn run_chat(
+    maybe_query: Option<String>,
+    model_type: llm::ModelType,
+    model_provider: Option<ChatProvider>,
+    config: Config,
+) -> anyhow::Result<()> {
     let query = llm::get_query(maybe_query)?;
-    let client_provider = config
-        .get_chat_provider()
-        .expect("No provider configured that supports web chat");
+    let client_provider = match model_provider {
+        Some(provider) => provider,
+        None => config
+            .get_chat_provider()
+            .expect("No provider configured that supports web chat"),
+    };
     let client = client_provider.create_client(config)?;
-    let result = client.create_message(llm::ChatRequest {
-        query,
-        model_type: llm::ModelType::Large,
-    })?;
+    let result = client.create_message(llm::ChatRequest { query, model_type })?;
 
     println!("{}", result.message.content);
     Ok(())

@@ -2,6 +2,8 @@ use std::{env, error::Error, io, path::PathBuf};
 
 use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::{generate, Shell};
+use config::{ChatProvider, WebChatProvider};
+use llm::ModelType;
 use notes::DailyNoteSpecifier;
 
 mod actions;
@@ -59,10 +61,18 @@ enum Commands {
     WebChat {
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        #[arg(short = 'p', long, value_enum)]
+        model_provider: Option<WebChatProvider>,
+        #[arg(short, long, value_enum, default_value_t)]
+        model_type: ModelType,
     },
     Chat {
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        #[arg(short = 'p', long, value_enum)]
+        model_provider: Option<ChatProvider>,
+        #[arg(short, long, value_enum, default_value_t)]
+        model_type: ModelType,
     },
 }
 
@@ -182,8 +192,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             let shell = language.unwrap_or(Shell::from_env().unwrap_or(Shell::Bash));
             generate(shell, &mut cmd, bin_name, &mut io::stdout());
         }
-        Commands::WebChat { query } => actions::run_web_chat(query, context.config)?,
-        Commands::Chat { query } => actions::run_chat(query, context.config)?,
+        Commands::WebChat {
+            query,
+            model_type,
+            model_provider,
+        } => actions::run_web_chat(query, model_type, model_provider, context.config)?,
+        Commands::Chat {
+            query,
+            model_type,
+            model_provider,
+        } => actions::run_chat(query, model_type, model_provider, context.config)?,
     };
 
     if let Some(shell_actions_file) = cli.shell_actions_file {
