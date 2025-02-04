@@ -1,4 +1,7 @@
+use anyhow::{anyhow, bail};
 use serde::{Deserialize, Serialize};
+
+use crate::config::{resolve_secret, Config};
 
 use super::{Message, Role};
 
@@ -78,5 +81,44 @@ impl AnthropicClient {
             .into_json()?;
 
         Ok(response)
+    }
+}
+
+impl super::LlmProvider for AnthropicClient {
+    fn from_config(config: Config) -> anyhow::Result<Self> {
+        let api_key_raw = config
+            .anthropic_api_key
+            .ok_or(anyhow!("Missing anthropic_api_key in config"))?;
+        let api_key = resolve_secret(&api_key_raw)?;
+        Ok(Self::new(api_key))
+    }
+}
+
+impl super::Chat for AnthropicClient {
+    fn create_message(&self, request: super::ChatRequest) -> anyhow::Result<super::ChatResponse> {
+        let result = self.create_chat_completion(AnthropicRequest {
+            messages: vec![super::Message {
+                role: super::Role::User,
+                content: request.query,
+            }],
+            model: match request.model_type {
+                super::ModelType::Small => AnthropicModel::Claude35Haiku,
+                super::ModelType::Large => AnthropicModel::Claude35Sonnet,
+                super::ModelType::Thinking => bail!("Anthropic dosen't have a thinking model"),
+            },
+            max_tokens: 1024,
+            ..AnthropicRequest::default()
+        })?;
+        let content = result
+            .content
+            .into_iter()
+            .nth(0)
+            .expect("It should always return some content");
+        Ok(super::ChatResponse {
+            message: Message {
+                content: content.text,
+                role: result.role,
+            },
+        })
     }
 }

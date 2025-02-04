@@ -368,3 +368,18 @@ pub fn run_web_chat(maybe_query: Option<String>, config: Config) -> anyhow::Resu
 
     Ok(())
 }
+
+pub fn run_chat(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+    let query = llm::get_query(maybe_query)?;
+    let client_provider = config
+        .get_chat_provider()
+        .expect("No provider configured that supports web chat");
+    let client = client_provider.create_client(config)?;
+    let result = client.create_message(llm::ChatRequest {
+        query,
+        model_type: llm::ModelType::Large,
+    })?;
+
+    println!("{}", result.message.content);
+    Ok(())
+}

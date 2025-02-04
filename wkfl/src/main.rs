@@ -60,6 +60,10 @@ enum Commands {
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
     },
+    Chat {
+        #[arg(value_hint = ValueHint::Other)]
+        query: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -179,6 +183,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             generate(shell, &mut cmd, bin_name, &mut io::stdout());
         }
         Commands::WebChat { query } => actions::run_web_chat(query, context.config)?,
+        Commands::Chat { query } => actions::run_chat(query, context.config)?,
     };
 
     if let Some(shell_actions_file) = cli.shell_actions_file {
