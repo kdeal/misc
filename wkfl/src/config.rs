@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Ok};
+use clap::ValueEnum;
 use home::home_dir;
 
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ use crate::llm::{
     GroundedChat, LlmProvider,
 };
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, ValueEnum)]
 pub enum WebChatProvider {
     VertexAI,
     Perplexity,
@@ -29,7 +30,7 @@ impl WebChatProvider {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, ValueEnum)]
 pub enum ChatProvider {
     VertexAI,
     Anthropic,

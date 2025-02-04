@@ -1,6 +1,7 @@
 use std::io::{self, IsTerminal, Read};
 
 use anyhow::Result;
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 use crate::{config::Config, prompts::basic_prompt};
@@ -29,9 +30,9 @@ pub enum Role {
     User,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, ValueEnum)]
 pub enum ModelType {
+    #[default]
     Small,
     Large,
     Thinking,
