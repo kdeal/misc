@@ -10,6 +10,12 @@ pub mod perplexity;
 pub mod vertex_ai;
 
 #[derive(Debug, Serialize)]
+pub struct ChatRequest {
+    pub query: String,
+    pub model_type: ModelType,
+}
+
+#[derive(Debug, Serialize)]
 pub struct GroundedChatRequest {
     pub query: String,
     pub model_type: GroundedModelType,
@@ -25,6 +31,14 @@ pub enum Role {
 
 #[allow(dead_code)]
 #[derive(Debug, Serialize)]
+pub enum ModelType {
+    Small,
+    Large,
+    Thinking,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Serialize)]
 pub enum GroundedModelType {
     Small,
     Large,
@@ -34,6 +48,11 @@ pub enum GroundedModelType {
 pub struct Message {
     pub role: Role,
     pub content: String,
+}
+
+#[derive(Debug)]
+pub struct ChatResponse {
+    pub message: Message,
 }
 
 #[derive(Debug)]
@@ -72,6 +91,10 @@ pub trait GroundedChat {
         &self,
         request: GroundedChatRequest,
     ) -> anyhow::Result<GroundedChatResponse>;
+}
+
+pub trait Chat {
+    fn create_message(&self, request: ChatRequest) -> anyhow::Result<ChatResponse>;
 }
 
 pub fn get_query(maybe_query: Option<String>) -> Result<String> {

@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Ok};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fmt;
@@ -191,6 +191,14 @@ impl VertexAiClient {
         let completion = response.into_json::<VertexAiResponse>()?;
         Ok(completion)
     }
+
+    fn convert_to_standard_role(role: Option<Role>) -> super::Role {
+        match role {
+            Some(Role::User) => super::Role::User,
+            Some(Role::Model) => super::Role::Assistant,
+            None => super::Role::Assistant,
+        }
+    }
 }
 
 impl super::LlmProvider for VertexAiClient {
@@ -241,10 +249,17 @@ impl super::GroundedChat for VertexAiClient {
             })
             .collect();
         supports.sort_by_key(|support| support.end_index);
+        let content = candidate
+            .content
+            .parts
+            .into_iter()
+            .nth(0)
+            .expect("There should always be one candidate")
+            .text;
         Ok(super::GroundedChatResponse {
             message: super::Message {
-                role: super::Role::Assistant,
-                content: candidate.content.parts[0].text.clone(),
+                role: Self::convert_to_standard_role(candidate.content.role),
+                content,
             },
             citations: super::CitationMetadata {
                 sources: grounding_metadata
@@ -253,6 +268,44 @@ impl super::GroundedChat for VertexAiClient {
                     .map(|chunk| chunk.web)
                     .collect(),
                 supports,
+            },
+        })
+    }
+}
+
+impl super::Chat for VertexAiClient {
+    fn create_message(&self, request: super::ChatRequest) -> anyhow::Result<super::ChatResponse> {
+        let vertex_request = VertexAiRequest {
+            contents: vec![Content {
+                role: Some(Role::User),
+                parts: vec![Part {
+                    text: request.query,
+                }],
+            }],
+            ..VertexAiRequest::default()
+        };
+        let model = match request.model_type {
+            super::ModelType::Small => VertexAiModel::Gemini20Flash,
+            super::ModelType::Large => VertexAiModel::GeminiExp,
+            super::ModelType::Thinking => VertexAiModel::Gemini20FlashThinking,
+        };
+        let response = self.create_chat_completion(vertex_request, model)?;
+        let candidate = response
+            .candidates
+            .into_iter()
+            .nth(0)
+            .expect("It should always return a canidate");
+        let content = candidate
+            .content
+            .parts
+            .into_iter()
+            .nth(0)
+            .expect("There should always be one candidate")
+            .text;
+        Ok(super::ChatResponse {
+            message: super::Message {
+                content,
+                role: Self::convert_to_standard_role(candidate.content.role),
             },
         })
     }

@@ -10,7 +10,8 @@ use home::home_dir;
 use serde::{Deserialize, Serialize};
 
 use crate::llm::{
-    perplexity::PerplexityClient, vertex_ai::VertexAiClient, GroundedChat, LlmProvider,
+    anthropic::AnthropicClient, perplexity::PerplexityClient, vertex_ai::VertexAiClient, Chat,
+    GroundedChat, LlmProvider,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -28,6 +29,21 @@ impl WebChatProvider {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum ChatProvider {
+    VertexAI,
+    Anthropic,
+}
+
+impl ChatProvider {
+    pub fn create_client(&self, config: Config) -> anyhow::Result<Box<dyn Chat>> {
+        match self {
+            ChatProvider::VertexAI => Ok(Box::new(VertexAiClient::from_config(config)?)),
+            ChatProvider::Anthropic => Ok(Box::new(AnthropicClient::from_config(config)?)),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct VertexAiConfig {
     pub api_key: String,
@@ -40,6 +56,7 @@ pub struct Config {
     repositories_directory: String,
     notes_directory: Option<String>,
     web_chat_provider: Option<WebChatProvider>,
+    chat_provider: Option<ChatProvider>,
 
     pub anthropic_api_key: Option<String>,
     pub perplexity_api_key: Option<String>,
@@ -83,6 +100,21 @@ impl Config {
 
         if self.vertex_ai.is_some() {
             return Some(WebChatProvider::VertexAI);
+        }
+
+        None
+    }
+    pub fn get_chat_provider(&self) -> Option<ChatProvider> {
+        if self.chat_provider.is_some() {
+            return self.chat_provider.clone();
+        }
+
+        if self.anthropic_api_key.is_some() {
+            return Some(ChatProvider::Anthropic);
+        }
+
+        if self.vertex_ai.is_some() {
+            return Some(ChatProvider::VertexAI);
         }
 
         None
