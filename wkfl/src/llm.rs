@@ -18,7 +18,7 @@ pub struct ChatRequest {
 #[derive(Debug, Serialize)]
 pub struct GroundedChatRequest {
     pub query: String,
-    pub model_type: GroundedModelType,
+    pub model_type: ModelType,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,13 +35,6 @@ pub enum ModelType {
     Small,
     Large,
     Thinking,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
-pub enum GroundedModelType {
-    Small,
-    Large,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

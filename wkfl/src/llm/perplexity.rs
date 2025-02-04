@@ -12,6 +12,8 @@ pub enum PerplexityModel {
     #[default]
     Sonar,
     SonarPro,
+    SonarReasoning,
+    SonarReasoningPro,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -210,11 +212,17 @@ impl super::GroundedChat for PerplexityClient {
         &self,
         request: super::GroundedChatRequest,
     ) -> anyhow::Result<super::GroundedChatResponse> {
+        let model = match request.model_type {
+            super::ModelType::Small => PerplexityModel::Sonar,
+            super::ModelType::Large => PerplexityModel::SonarPro,
+            super::ModelType::Thinking => PerplexityModel::SonarReasoningPro,
+        };
         let request = PerplexityRequest {
             messages: vec![super::Message {
                 role: super::Role::User,
                 content: request.query,
             }],
+            model,
             ..PerplexityRequest::default()
         };
         let response = self.create_chat_completion(request)?;
