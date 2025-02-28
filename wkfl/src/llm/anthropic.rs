@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
 use crate::config::{resolve_secret, Config};
@@ -12,9 +12,32 @@ pub enum AnthropicModel {
     #[serde(rename = "claude-3-5-haiku-latest")]
     Claude35Haiku,
     #[default]
-    #[serde(alias = "claude-3-5-sonnet-20241022")]
-    #[serde(rename = "claude-3-5-sonnet-latest")]
-    Claude35Sonnet,
+    #[serde(alias = "claude-3-7-sonnet-20250219")]
+    #[serde(rename = "claude-3-7-sonnet-latest")]
+    Claude37Sonnet,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThinkingType {
+    #[default]
+    Enabled,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ThinkingConfig {
+    #[serde(rename = "type")]
+    pub thinking_type: ThinkingType,
+    pub budget_tokens: i32,
+}
+
+impl Default for ThinkingConfig {
+    fn default() -> Self {
+        ThinkingConfig {
+            thinking_type: ThinkingType::default(),
+            budget_tokens: 1024,
+        }
+    }
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -32,6 +55,8 @@ pub struct AnthropicRequest {
     pub system: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingConfig>,
 }
 
 #[allow(dead_code)]
@@ -39,7 +64,11 @@ pub struct AnthropicRequest {
 pub struct ContentBlock {
     #[serde(rename = "type")]
     pub content_type: String,
-    pub text: String,
+    pub text: Option<String>,
+    // This is for type=thinking
+    pub thinking: Option<String>,
+    // This is for type=redacted-thinking
+    pub data: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -103,20 +132,32 @@ impl super::Chat for AnthropicClient {
             }],
             model: match request.model_type {
                 super::ModelType::Small => AnthropicModel::Claude35Haiku,
-                super::ModelType::Large => AnthropicModel::Claude35Sonnet,
-                super::ModelType::Thinking => bail!("Anthropic dosen't have a thinking model"),
+                super::ModelType::Large => AnthropicModel::Claude37Sonnet,
+                super::ModelType::Thinking => AnthropicModel::Claude37Sonnet,
             },
-            max_tokens: 1024,
+            // Double max tokens for thinking to account for thinking tokens
+            max_tokens: match request.model_type {
+                super::ModelType::Thinking => 2048,
+                _ => 1024,
+            },
+            thinking: match request.model_type {
+                super::ModelType::Thinking => Some(ThinkingConfig::default()),
+                _ => None,
+            },
             ..AnthropicRequest::default()
         })?;
         let content = result
             .content
             .into_iter()
+            // Filter out thinking blocks
+            .filter(|message| message.content_type == "text")
             .nth(0)
             .expect("It should always return some content");
         Ok(super::ChatResponse {
             message: Message {
-                content: content.text,
+                content: content
+                    .text
+                    .expect("text type content should have text field"),
                 role: result.role,
             },
         })
