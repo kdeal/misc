@@ -279,7 +279,17 @@ pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyho
         max_tokens: 1024,
         ..anthropic::AnthropicRequest::default()
     })?;
-    println!("{}", result.content[0].text);
+    let content = result
+        .content
+        .into_iter()
+        .next()
+        .expect("It should always return some content");
+    println!(
+        "{}",
+        content
+            .text
+            .expect("text type content should have text field")
+    );
     Ok(())
 }
 
