@@ -100,6 +100,8 @@ enum LlmCommands {
     Perplexity {
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        #[arg(short, long)]
+        stream: bool,
     },
     VertexAi {
         #[arg(value_hint = ValueHint::Other)]
@@ -175,8 +177,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::Llm {
             command: llm_command,
         } => match llm_command {
-            LlmCommands::Perplexity { query } => {
-                actions::run_perplexity_query(query, context.config)?
+            LlmCommands::Perplexity { query, stream } => {
+                if stream {
+                    actions::stream_perplexity_query(query, context.config)?
+                } else {
+                    actions::run_perplexity_query(query, context.config)?
+                }
             }
             LlmCommands::Anthropic { query } => {
                 actions::run_anthropic_query(query, context.config)?

@@ -1,4 +1,7 @@
-use std::str::FromStr;
+use std::{
+    io::{BufRead, BufReader, Read},
+    str::FromStr,
+};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -41,6 +44,7 @@ pub struct PerplexityRequest {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct Choice {
+    pub delta: super::Message,
     pub message: super::Message,
     pub finish_reason: Option<String>,
     pub index: i32,
@@ -65,6 +69,57 @@ pub struct PerplexityResponse {
     pub citations: Option<Vec<String>>,
 }
 
+pub struct PerplexityStreamResponseIterator {
+    reader: BufReader<Box<dyn Read>>,
+    done: bool,
+}
+
+impl Iterator for PerplexityStreamResponseIterator {
+    type Item = anyhow::Result<PerplexityResponse>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+        let mut line = String::new();
+        loop {
+            if let Err(e) = self.reader.read_line(&mut line) {
+                return Some(Err(anyhow!(e)));
+            }
+            if line.trim().is_empty() {
+                line.clear();
+                continue;
+            }
+
+            // Return error if it doesn't have prefix
+            let data_str = match line.strip_prefix("data: ") {
+                Some(data_str) => data_str,
+                None => {
+                    return Some(Err(anyhow!("Invalid data prefix '{}'", line)));
+                }
+            };
+
+            if data_str.starts_with("[Done]") {
+                println!("Stream completed");
+                return None;
+            }
+
+            let response = match serde_json::from_str::<PerplexityResponse>(data_str) {
+                Ok(response) => response,
+                Err(e) => {
+                    return Some(Err(anyhow!(e)));
+                }
+            };
+
+            if response.choices[0].finish_reason.is_some() {
+                self.done = true;
+            }
+
+            return Some(Ok(response));
+        }
+    }
+}
+
 pub struct PerplexityClient {
     api_key: String,
 }
@@ -85,6 +140,21 @@ impl PerplexityClient {
 
         let completion = response.into_json::<PerplexityResponse>()?;
         Ok(completion)
+    }
+
+    pub fn stream_chat_completion(
+        &self,
+        request: PerplexityRequest,
+    ) -> anyhow::Result<PerplexityStreamResponseIterator> {
+        let response = ureq::post("https://api.perplexity.ai/chat/completions")
+            .set("Authorization", &format!("Bearer {}", self.api_key))
+            .set("Content-Type", "application/json")
+            .send_json(&request)?;
+
+        Ok(PerplexityStreamResponseIterator {
+            reader: BufReader::new(Box::new(response.into_reader())),
+            done: false,
+        })
     }
 }
 
