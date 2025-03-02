@@ -264,6 +264,45 @@ pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyh
     Ok(())
 }
 
+pub fn stream_perplexity_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+    let query = llm::get_query(maybe_query)?;
+    let client = perplexity::PerplexityClient::from_config(config)?;
+    let result = client.stream_chat_completion(perplexity::PerplexityRequest {
+        messages: vec![llm::Message {
+            role: llm::Role::User,
+            content: query,
+        }],
+        stream: Some(true),
+        ..perplexity::PerplexityRequest::default()
+    })?;
+    let mut citation_text = String::new();
+    result.for_each(|partial_result| {
+        let part = match partial_result {
+            Ok(result) => result,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                return;
+            }
+        };
+        if citation_text.is_empty() {
+            if let Some(citations) = part.citations {
+                citation_text.push('\n');
+                citation_text.push_str(
+                    &citations
+                        .iter()
+                        .enumerate()
+                        .map(|(i, citation)| format!("[{}] = {}", i, citation))
+                        .collect::<Vec<String>>()
+                        .join("\n"),
+                );
+            }
+        }
+        print!("{}", part.choices[0].delta.content)
+    });
+    println!("{}", citation_text);
+    Ok(())
+}
+
 pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
     let query = llm::get_query(maybe_query)?;
     let api_key_raw = config
