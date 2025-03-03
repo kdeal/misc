@@ -277,14 +277,8 @@ pub fn stream_perplexity_query(maybe_query: Option<String>, config: Config) -> a
         ..perplexity::PerplexityRequest::default()
     })?;
     let mut citation_text = String::new();
-    result.for_each(|partial_result| {
-        let part = match partial_result {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                return;
-            }
-        };
+    for partial_result in result {
+        let part = partial_result?;
         if citation_text.is_empty() {
             if let Some(citations) = part.citations {
                 citation_text.push('\n');
@@ -299,8 +293,9 @@ pub fn stream_perplexity_query(maybe_query: Option<String>, config: Config) -> a
             }
         }
         print!("{}", part.choices[0].delta.content);
+        // This is a nice to have, so ignore any errors it returns
         std::io::stdout().flush().unwrap_or_default();
-    });
+    }
     println!("{}", citation_text);
     Ok(())
 }
