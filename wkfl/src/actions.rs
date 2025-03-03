@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use log::info;
 use std::fs;
 use std::io;
+use std::io::Write;
 use url::Url;
 
 use crate::config::get_repo_config;
@@ -297,7 +298,8 @@ pub fn stream_perplexity_query(maybe_query: Option<String>, config: Config) -> a
                 );
             }
         }
-        print!("{}", part.choices[0].delta.content)
+        print!("{}", part.choices[0].delta.content);
+        std::io::stdout().flush().unwrap_or_default();
     });
     println!("{}", citation_text);
     Ok(())
