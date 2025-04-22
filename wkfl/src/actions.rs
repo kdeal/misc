@@ -123,18 +123,21 @@ fn extract_repo_from_url(repo_url_str: &str) -> anyhow::Result<String> {
         let (_, repo) = repo_url_str.split_once(':').ok_or(anyhow::anyhow!(
             "Repo url that start with git@ must be in the form 'git@<host>:<repo>'"
         ))?;
-        return Ok(repo.to_string());
+        return Ok(repo.strip_suffix(".git").unwrap_or(repo).to_string());
     }
 
     let repo_url = Url::parse(repo_url_str)?;
     let repo = repo_url.path();
     if repo.starts_with('/') {
-        Ok(repo
+        let repo_no_prefix = repo
             .strip_prefix('/')
-            .expect("Checked that it starts with '/'")
+            .expect("Checked that it starts with '/'");
+        Ok(repo_no_prefix
+            .strip_suffix(".git")
+            .unwrap_or(repo_no_prefix)
             .to_string())
     } else {
-        Ok(repo.to_string())
+        Ok(repo.strip_suffix(".git").unwrap_or(repo).to_string())
     }
 }
 
