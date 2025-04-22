@@ -657,10 +657,10 @@ pub fn boolean_prompt(prompt: &str, default: bool) -> anyhow::Result<bool> {
                 KeyCode::Enter => {
                     break;
                 }
-                KeyCode::Char('l' | 'f' | 'n') => {
+                KeyCode::Char('l' | 'f' | 'n') | KeyCode::Right => {
                     state = false;
                 }
-                KeyCode::Char('h' | 't' | 'y') => {
+                KeyCode::Char('h' | 't' | 'y') | KeyCode::Left => {
                     state = true;
                 }
                 _ => {}
