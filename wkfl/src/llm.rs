@@ -1,6 +1,6 @@
-use std::io::{self, IsTerminal, Read};
+use std::io::{self, BufRead, BufReader, IsTerminal, Read};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
@@ -103,4 +103,56 @@ pub fn get_query(maybe_query: Option<String>) -> Result<String> {
     let mut query = String::new();
     stdin.read_to_string(&mut query)?;
     Ok(query)
+}
+
+pub struct ServerSentEvent {
+    pub data: String,
+    pub is_done: bool,
+}
+
+pub struct SseReader {
+    reader: BufReader<Box<dyn Read>>,
+}
+
+impl SseReader {
+    pub fn new(reader: Box<dyn Read>) -> Self {
+        Self {
+            reader: BufReader::new(reader),
+        }
+    }
+
+    pub fn next_event(&mut self) -> Result<Option<ServerSentEvent>> {
+        let mut line = String::new();
+        loop {
+            if let Err(e) = self.reader.read_line(&mut line) {
+                return Err(anyhow!(e));
+            }
+
+            if line.trim().is_empty() {
+                line.clear();
+                continue;
+            }
+
+            // Parse data prefix
+            let data_str = match line.strip_prefix("data: ") {
+                Some(data_str) => data_str,
+                None => {
+                    return Err(anyhow!("Invalid data prefix '{}'", line));
+                }
+            };
+
+            // Check if stream is done
+            if data_str.starts_with("[Done]") {
+                return Ok(Some(ServerSentEvent {
+                    data: String::new(),
+                    is_done: true,
+                }));
+            }
+
+            return Ok(Some(ServerSentEvent {
+                data: data_str.to_string(),
+                is_done: false,
+            }));
+        }
+    }
 }
