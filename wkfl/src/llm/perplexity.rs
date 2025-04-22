@@ -69,8 +69,60 @@ pub struct PerplexityResponse {
     pub citations: Option<Vec<String>>,
 }
 
-pub struct PerplexityStreamResponseIterator {
+pub struct ServerSentEvent {
+    pub data: String,
+    pub is_done: bool,
+}
+
+pub struct SseReader {
     reader: BufReader<Box<dyn Read>>,
+}
+
+impl SseReader {
+    pub fn new(reader: Box<dyn Read>) -> Self {
+        Self {
+            reader: BufReader::new(reader),
+        }
+    }
+
+    pub fn next_event(&mut self) -> anyhow::Result<Option<ServerSentEvent>> {
+        let mut line = String::new();
+        loop {
+            if let Err(e) = self.reader.read_line(&mut line) {
+                return Err(anyhow!(e));
+            }
+            
+            if line.trim().is_empty() {
+                line.clear();
+                continue;
+            }
+
+            // Parse data prefix
+            let data_str = match line.strip_prefix("data: ") {
+                Some(data_str) => data_str,
+                None => {
+                    return Err(anyhow!("Invalid data prefix '{}'", line));
+                }
+            };
+
+            // Check if stream is done
+            if data_str.starts_with("[Done]") {
+                return Ok(Some(ServerSentEvent {
+                    data: String::new(),
+                    is_done: true,
+                }));
+            }
+
+            return Ok(Some(ServerSentEvent {
+                data: data_str.to_string(),
+                is_done: false,
+            }));
+        }
+    }
+}
+
+pub struct PerplexityStreamResponseIterator {
+    sse_reader: SseReader,
     done: bool,
 }
 
@@ -81,42 +133,32 @@ impl Iterator for PerplexityStreamResponseIterator {
         if self.done {
             return None;
         }
-        let mut line = String::new();
-        loop {
-            if let Err(e) = self.reader.read_line(&mut line) {
-                return Some(Err(anyhow!(e)));
-            }
-            if line.trim().is_empty() {
-                line.clear();
-                continue;
-            }
-
-            // Return error if it doesn't have prefix
-            let data_str = match line.strip_prefix("data: ") {
-                Some(data_str) => data_str,
-                None => {
-                    return Some(Err(anyhow!("Invalid data prefix '{}'", line)));
-                }
-            };
-
-            if data_str.starts_with("[Done]") {
-                println!("Stream completed");
-                return None;
-            }
-
-            let response = match serde_json::from_str::<PerplexityResponse>(data_str) {
-                Ok(response) => response,
-                Err(e) => {
-                    return Some(Err(anyhow!(e)));
-                }
-            };
-
-            if response.choices[0].finish_reason.is_some() {
-                self.done = true;
-            }
-
-            return Some(Ok(response));
+        
+        // Get the next SSE event
+        let event = match self.sse_reader.next_event() {
+            Ok(Some(event)) => event,
+            Ok(None) => return None,
+            Err(e) => return Some(Err(e)),
+        };
+        
+        // Handle done event
+        if event.is_done {
+            println!("Stream completed");
+            return None;
         }
+        
+        // Parse the response
+        let response = match serde_json::from_str::<PerplexityResponse>(&event.data) {
+            Ok(response) => response,
+            Err(e) => return Some(Err(anyhow!(e))),
+        };
+
+        // Check if this is the last chunk
+        if response.choices[0].finish_reason.is_some() {
+            self.done = true;
+        }
+
+        Some(Ok(response))
     }
 }
 
@@ -152,7 +194,7 @@ impl PerplexityClient {
             .send_json(&request)?;
 
         Ok(PerplexityStreamResponseIterator {
-            reader: BufReader::new(Box::new(response.into_reader())),
+            sse_reader: SseReader::new(Box::new(response.into_reader())),
             done: false,
         })
     }
