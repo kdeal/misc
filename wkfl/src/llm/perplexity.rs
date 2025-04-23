@@ -89,12 +89,6 @@ impl Iterator for PerplexityStreamResponseIterator {
             Err(e) => return Some(Err(e)),
         };
 
-        // Handle done event
-        if event.is_done {
-            println!("Stream completed");
-            return None;
-        }
-
         // Parse the response
         let response = match serde_json::from_str::<PerplexityResponse>(&event.data) {
             Ok(response) => response,

@@ -106,8 +106,10 @@ pub fn get_query(maybe_query: Option<String>) -> Result<String> {
 }
 
 pub struct ServerSentEvent {
+    pub event: Option<String>,
     pub data: String,
-    pub is_done: bool,
+    pub id: Option<String>,
+    pub retry: Option<u64>,
 }
 
 pub struct SseReader {
@@ -122,37 +124,74 @@ impl SseReader {
     }
 
     pub fn next_event(&mut self) -> Result<Option<ServerSentEvent>> {
-        let mut line = String::new();
+        let mut event: Option<String> = None;
+        let mut data = Vec::<String>::new();
+        let mut id: Option<String> = None;
+        let mut retry: Option<u64> = None;
+
         loop {
+            let mut line = String::new();
             if let Err(e) = self.reader.read_line(&mut line) {
                 return Err(anyhow!(e));
             }
 
-            if line.trim().is_empty() {
-                line.clear();
-                continue;
-            }
+            let line = line.trim();
 
-            // Parse data prefix
-            let data_str = match line.strip_prefix("data: ") {
-                Some(data_str) => data_str,
-                None => {
-                    return Err(anyhow!("Invalid data prefix '{}'", line));
+            // Empty line marks the end of an event
+            if line.is_empty() {
+                // If we don't have data keep going
+                if data.is_empty() {
+                    continue;
                 }
-            };
 
-            // Check if stream is done
-            if data_str.starts_with("[Done]") {
+                let mut data_str = data.join("\n");
+                // Remove trailing newline from the concatenated data
+                if data_str.ends_with('\n') {
+                    data_str.pop();
+                }
+
                 return Ok(Some(ServerSentEvent {
-                    data: String::new(),
-                    is_done: true,
+                    event,
+                    data: data_str,
+                    id,
+                    retry,
                 }));
             }
 
-            return Ok(Some(ServerSentEvent {
-                data: data_str.to_string(),
-                is_done: false,
-            }));
+            // Ignore comment lines
+            if line.starts_with(':') {
+                continue;
+            }
+
+            // Parse field
+            if let Some((field, value)) = line.split_once(':') {
+                let value = if value.starts_with(' ') {
+                    &value[1..]
+                } else {
+                    value
+                };
+
+                match field {
+                    "event" => event = Some(value.to_string()),
+                    "data" => data.push(value.to_string()),
+                    "id" => id = Some(value.to_string()),
+                    "retry" => {
+                        if let Ok(ms) = value.parse::<u64>() {
+                            retry = Some(ms);
+                        }
+                    }
+                    _ => {} // Ignore other fields
+                }
+            } else {
+                // Line without colon is treated as field name with empty value
+                match line {
+                    "event" => event = Some(String::new()),
+                    "data" => data.push(String::new()),
+                    "id" => id = Some(String::new()),
+                    "retry" => retry = None,
+                    _ => {} // Ignore other fields
+                }
+            }
         }
     }
 }
