@@ -128,8 +128,10 @@ impl PerplexityClient {
 
     pub fn stream_chat_completion(
         &self,
-        request: PerplexityRequest,
+        mut request: PerplexityRequest,
     ) -> anyhow::Result<PerplexityStreamResponseIterator> {
+        request.stream = Some(true);
+
         let response = ureq::post("https://api.perplexity.ai/chat/completions")
             .set("Authorization", &format!("Bearer {}", self.api_key))
             .set("Content-Type", "application/json")

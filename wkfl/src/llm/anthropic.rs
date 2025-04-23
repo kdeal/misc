@@ -1,7 +1,10 @@
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{resolve_secret, Config};
+use crate::{
+    config::{resolve_secret, Config},
+    llm::SseReader,
+};
 
 use super::{Message, Role};
 
@@ -61,14 +64,12 @@ pub struct AnthropicRequest {
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
-pub struct ContentBlock {
-    #[serde(rename = "type")]
-    pub content_type: String,
-    pub text: Option<String>,
-    // This is for type=thinking
-    pub thinking: Option<String>,
-    // This is for type=redacted-thinking
-    pub data: Option<String>,
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum ContentBlock {
+    Text { text: String },
+    Thinking { thinking: String },
+    RedactedThinking { data: String },
 }
 
 #[allow(dead_code)]
@@ -87,6 +88,115 @@ pub struct AnthropicResponse {
     pub content: Vec<ContentBlock>,
     pub stop_reason: Option<String>,
     pub usage: Usage,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+pub struct Delta {
+    pub stop_reason: Option<String>,
+    pub stop_sequence: Option<String>,
+    pub text: Option<String>,
+    pub thinking: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+pub struct UsageDelta {
+    pub input_tokens: Option<i32>,
+    pub output_tokens: Option<i32>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum StreamEvent {
+    MessageStart {
+        message: AnthropicResponse,
+    },
+    ContentBlockStart {
+        index: usize,
+        content_block: ContentBlock,
+    },
+    ContentBlockDelta {
+        index: usize,
+        delta: ContentDelta,
+    },
+    ContentBlockStop {
+        index: usize,
+    },
+    MessageDelta {
+        delta: Delta,
+        usage: Option<UsageDelta>,
+    },
+    MessageStop,
+    Ping,
+    Error {
+        error: StreamError,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StreamError {
+    #[serde(rename = "type")]
+    pub error_type: String,
+    pub message: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum ContentDelta {
+    TextDelta { text: String },
+    ThinkingDelta { thinking: String },
+    RedactedThinkingDelta { data: String },
+    SignatureDelta { signature: String },
+    InputJsonDelta { partial_json: String },
+}
+
+pub struct AnthropicStreamResponseIterator {
+    sse_reader: SseReader,
+    done: bool,
+}
+
+impl AnthropicStreamResponseIterator {
+    pub fn new(sse_reader: SseReader) -> Self {
+        Self {
+            sse_reader,
+            done: false,
+        }
+    }
+}
+
+impl Iterator for AnthropicStreamResponseIterator {
+    type Item = anyhow::Result<StreamEvent>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        // Get the next SSE event
+        let sse_event = match self.sse_reader.next_event() {
+            Ok(Some(event)) => event,
+            Ok(None) => return None,
+            Err(e) => return Some(Err(anyhow!(e))),
+        };
+
+        // Parse the stream event
+        let event_result = serde_json::from_str::<StreamEvent>(&sse_event.data);
+        match event_result {
+            Ok(event) => {
+                // Check if this is the final message in the stream
+                if matches!(event, StreamEvent::MessageStop) {
+                    self.done = true;
+                }
+                Some(Ok(event))
+            }
+            Err(e) => Some(Err(anyhow!("Failed to parse stream event: {}", e))),
+        }
+    }
 }
 
 pub struct AnthropicClient {
@@ -110,6 +220,24 @@ impl AnthropicClient {
             .into_json()?;
 
         Ok(response)
+    }
+
+    pub fn stream_chat_completion(
+        &self,
+        mut request: AnthropicRequest,
+    ) -> anyhow::Result<AnthropicStreamResponseIterator> {
+        // Ensure streaming is enabled
+        request.stream = Some(true);
+
+        let response = ureq::post("https://api.anthropic.com/v1/messages")
+            .set("x-api-key", &self.api_key)
+            .set("anthropic-version", "2023-06-01")
+            .set("Content-Type", "application/json")
+            .send_json(&request)?;
+
+        Ok(AnthropicStreamResponseIterator::new(SseReader::new(
+            Box::new(response.into_reader()),
+        )))
     }
 }
 
@@ -146,18 +274,21 @@ impl super::Chat for AnthropicClient {
             },
             ..AnthropicRequest::default()
         })?;
-        let content = result
-            .content
-            .into_iter()
-            // Filter out thinking blocks
-            .filter(|message| message.content_type == "text")
-            .nth(0)
-            .expect("It should always return some content");
+
+        for content in result.content {
+            if let ContentBlock::Text { text } = content {
+                return Ok(super::ChatResponse {
+                    message: Message {
+                        content: text,
+                        role: result.role,
+                    },
+                });
+            }
+        }
+
         Ok(super::ChatResponse {
             message: Message {
-                content: content
-                    .text
-                    .expect("text type content should have text field"),
+                content: "".to_string(),
                 role: result.role,
             },
         })
