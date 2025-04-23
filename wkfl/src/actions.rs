@@ -320,12 +320,73 @@ pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyho
         .into_iter()
         .next()
         .expect("It should always return some content");
-    println!(
-        "{}",
-        content
-            .text
-            .expect("text type content should have text field")
-    );
+
+    if let anthropic::ContentBlock::Text { text } = content {
+        println!("{}", text);
+    }
+
+    Ok(())
+}
+
+pub fn stream_anthropic_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+    let query = llm::get_query(maybe_query)?;
+    let api_key_raw = config
+        .anthropic_api_key
+        .ok_or(anyhow!("Missing anthropic_api_key in config"))?;
+    let api_key = resolve_secret(&api_key_raw)?;
+    let client = anthropic::AnthropicClient::new(api_key);
+    let stream = client.stream_chat_completion(anthropic::AnthropicRequest {
+        messages: vec![llm::Message {
+            role: llm::Role::User,
+            content: query,
+        }],
+        max_tokens: 1024,
+        stream: Some(true),
+        ..anthropic::AnthropicRequest::default()
+    })?;
+
+    for event in stream {
+        let event = event?;
+
+        match event {
+            anthropic::StreamEvent::ContentBlockStart { content_block, .. } => {
+                match content_block {
+                    anthropic::ContentBlock::Text { text } => {
+                        print!("{}", text);
+                        // Flush stdout to see incremental updates
+                        std::io::stdout().flush().unwrap_or_default();
+                    }
+                    anthropic::ContentBlock::Thinking { thinking } => {
+                        // Optionally print thinking output
+                        print!("\n[Thinking] {}", thinking);
+                        std::io::stdout().flush().unwrap_or_default();
+                    }
+                    _ => {} // Ignore other delta types
+                }
+            }
+            anthropic::StreamEvent::ContentBlockDelta { delta, .. } => {
+                match delta {
+                    anthropic::ContentDelta::TextDelta { text } => {
+                        print!("{}", text);
+                        // Flush stdout to see incremental updates
+                        std::io::stdout().flush().unwrap_or_default();
+                    }
+                    anthropic::ContentDelta::ThinkingDelta { thinking } => {
+                        // Optionally print thinking output
+                        print!("\n[Thinking] {}", thinking);
+                        std::io::stdout().flush().unwrap_or_default();
+                    }
+                    _ => {} // Ignore other delta types
+                }
+            }
+            anthropic::StreamEvent::Error { error } => {
+                eprintln!("Error: {} - {}", error.error_type, error.message);
+            }
+            _ => {} // Ignore other event types
+        }
+    }
+
+    println!(); // Add a newline at the end
     Ok(())
 }
 

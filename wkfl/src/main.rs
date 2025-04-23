@@ -96,6 +96,8 @@ enum LlmCommands {
     Anthropic {
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        #[arg(short, long)]
+        stream: bool,
     },
     Perplexity {
         #[arg(value_hint = ValueHint::Other)]
@@ -184,8 +186,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                     actions::run_perplexity_query(query, context.config)?
                 }
             }
-            LlmCommands::Anthropic { query } => {
-                actions::run_anthropic_query(query, context.config)?
+            LlmCommands::Anthropic { query, stream } => {
+                if stream {
+                    actions::stream_anthropic_query(query, context.config)?
+                } else {
+                    actions::run_anthropic_query(query, context.config)?
+                }
             }
             LlmCommands::VertexAi {
                 query,

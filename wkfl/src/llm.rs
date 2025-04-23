@@ -105,6 +105,7 @@ pub fn get_query(maybe_query: Option<String>) -> Result<String> {
     Ok(query)
 }
 
+#[allow(dead_code)]
 pub struct ServerSentEvent {
     pub event: Option<String>,
     pub data: String,
