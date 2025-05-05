@@ -178,10 +178,10 @@ impl Iterator for AnthropicStreamResponseIterator {
         }
 
         // Get the next SSE event
-        let sse_event = match self.sse_reader.next_event() {
-            Ok(Some(event)) => event,
-            Ok(None) => return None,
-            Err(e) => return Some(Err(anyhow!(e))),
+        let sse_event = match self.sse_reader.next() {
+            Some(Ok(event)) => event,
+            None => return None,
+            Some(Err(e)) => return Some(Err(anyhow!(e))),
         };
 
         // Parse the stream event

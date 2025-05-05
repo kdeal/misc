@@ -83,10 +83,10 @@ impl Iterator for PerplexityStreamResponseIterator {
         }
 
         // Get the next SSE event
-        let event = match self.sse_reader.next_event() {
-            Ok(Some(event)) => event,
-            Ok(None) => return None,
-            Err(e) => return Some(Err(e)),
+        let event = match self.sse_reader.next() {
+            Some(Ok(event)) => event,
+            None => return None,
+            Some(Err(e)) => return Some(Err(e)),
         };
 
         // Parse the response
