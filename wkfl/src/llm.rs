@@ -182,11 +182,7 @@ impl Iterator for SseReader {
 
             // Parse field
             if let Some((field, value)) = line.split_once(':') {
-                let value = if value.starts_with(' ') {
-                    &value[1..]
-                } else {
-                    value
-                };
+                let value = value.strip_prefix(' ').unwrap_or(value);
 
                 match field {
                     "event" => event = Some(value.to_string()),
