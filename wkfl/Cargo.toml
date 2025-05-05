@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 anyhow = { version = "1.0.98", features = ["backtrace"] }
 clap = { version = "4.5.37", features = ["derive"] }
-clap_complete = "4.5.48"
+clap_complete = "4.5.49"
 crossterm = "0.29.0"
 env_logger = "0.11.6"
 fuzzy-matcher = "0.3.7"
