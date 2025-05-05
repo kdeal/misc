@@ -89,6 +89,13 @@ impl Iterator for PerplexityStreamResponseIterator {
             Some(Err(e)) => return Some(Err(e)),
         };
 
+        // OpenAI terminates with the sentinel "[DONE]". Perplexity is based off
+        // OpenAI, so it might do this. I haven't seen it do this though.
+        if event.data.trim() == "[DONE]" {
+            self.done = true;
+            return None;
+        }
+
         // Parse the response
         let response = match serde_json::from_str::<PerplexityResponse>(&event.data) {
             Ok(response) => response,
