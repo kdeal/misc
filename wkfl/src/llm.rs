@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, BufReader, IsTerminal, Read};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
@@ -115,43 +115,59 @@ pub struct ServerSentEvent {
 
 pub struct SseReader {
     reader: BufReader<Box<dyn Read>>,
+    done: bool,
 }
 
 impl SseReader {
     pub fn new(reader: Box<dyn Read>) -> Self {
         Self {
             reader: BufReader::new(reader),
+            done: false,
         }
     }
+}
 
-    pub fn next_event(&mut self) -> Result<Option<ServerSentEvent>> {
+impl Iterator for SseReader {
+    type Item = anyhow::Result<ServerSentEvent>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
         let mut event: Option<String> = None;
         let mut data = Vec::<String>::new();
         let mut id: Option<String> = None;
         let mut retry: Option<u64> = None;
 
         loop {
-            let mut line = String::new();
-            if let Err(e) = self.reader.read_line(&mut line) {
-                return Err(anyhow!(e));
+            let mut line_buf = String::new();
+            let bytes_read_res = self.reader.read_line(&mut line_buf);
+            let bytes_read = match bytes_read_res {
+                Ok(val) => val,
+                Err(e) => return Some(Err(anyhow::Error::from(e))),
+            };
+
+            if bytes_read == 0 {
+                self.done = true;
             }
 
-            let line = line.trim();
+            let line = line_buf.trim();
 
             // Empty line marks the end of an event
-            if line.is_empty() {
+            if line.is_empty() || bytes_read == 0 {
                 // If we don't have data keep going
                 if data.is_empty() {
-                    continue;
+                    if self.done {
+                        return None;
+                    } else {
+                        continue;
+                    }
                 }
 
-                let mut data_str = data.join("\n");
-                // Remove trailing newline from the concatenated data
-                if data_str.ends_with('\n') {
-                    data_str.pop();
-                }
+                let data_str = data.join("\n");
 
-                return Ok(Some(ServerSentEvent {
+                return Some(Ok(ServerSentEvent {
                     event,
                     data: data_str,
                     id,
