@@ -393,6 +393,31 @@ pub fn stream_anthropic_query(maybe_query: Option<String>, config: Config) -> an
     Ok(())
 }
 
+pub fn stream_vertex_ai_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+    let query = llm::get_query(maybe_query)?;
+    let client = vertex_ai::VertexAiClient::from_config(config)?;
+    let request = vertex_ai::VertexAiRequest {
+        contents: vec![vertex_ai::Content {
+            role: Some(vertex_ai::Role::User),
+            parts: vec![vertex_ai::Part { text: query }],
+        }],
+        ..vertex_ai::VertexAiRequest::default()
+    };
+
+    let stream = client.stream_chat_completion(request, vertex_ai::VertexAiModel::default())?;
+
+    for event_result in stream {
+        let event = event_result?;
+        let text = &event.candidates[0].content.parts[0].text;
+        print!("{}", text);
+        // Flush stdout to see incremental updates
+        std::io::stdout().flush().unwrap_or_default();
+    }
+
+    println!(); // Add a newline at the end
+    Ok(())
+}
+
 pub fn run_vertex_ai_query(
     maybe_query: Option<String>,
     enable_search: bool,
