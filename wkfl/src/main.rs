@@ -110,6 +110,8 @@ enum LlmCommands {
         query: Option<String>,
         #[arg(short, long)]
         enable_search: bool,
+        #[arg(short, long)]
+        stream: bool,
     },
 }
 
@@ -196,7 +198,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             LlmCommands::VertexAi {
                 query,
                 enable_search,
-            } => actions::run_vertex_ai_query(query, enable_search, context.config)?,
+                stream,
+            } => {
+                if stream {
+                    actions::stream_vertex_ai_query(query, context.config)?
+                } else {
+                    actions::run_vertex_ai_query(query, enable_search, context.config)?
+                }
+            }
         },
         Commands::Completion { language } => {
             let mut cmd = Cli::command();

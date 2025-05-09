@@ -1,9 +1,12 @@
-use anyhow::{anyhow, Ok};
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fmt;
 
-use crate::config::{resolve_secret, Config};
+use crate::{
+    config::{resolve_secret, Config},
+    llm::SseReader,
+};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub enum VertexAiModel {
@@ -122,6 +125,7 @@ pub struct Candidate {
     pub content: Content,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grounding_metadata: Option<GroundingMetadata>,
+    pub finish_reason: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -160,9 +164,57 @@ pub struct GroundingSupportSegment {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageMetadata {
-    pub prompt_token_count: i32,
-    pub candidates_token_count: i32,
-    pub total_token_count: i32,
+    // When streaming only the final response has these fields
+    pub prompt_token_count: Option<i32>,
+    pub candidates_token_count: Option<i32>,
+    pub total_token_count: Option<i32>,
+}
+
+pub struct VertexAiStreamResponseIterator {
+    sse_reader: SseReader,
+    done: bool,
+}
+
+impl VertexAiStreamResponseIterator {
+    pub fn new(sse_reader: SseReader) -> Self {
+        Self {
+            sse_reader,
+            done: false,
+        }
+    }
+}
+
+impl Iterator for VertexAiStreamResponseIterator {
+    type Item = anyhow::Result<VertexAiResponse>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        // Get the next SSE event
+        let sse_event = match self.sse_reader.next() {
+            Some(Ok(event)) => event,
+            None => {
+                self.done = true;
+                return None;
+            }
+            Some(Err(e)) => return Some(Err(anyhow!(e))),
+        };
+
+        // Parse the stream event
+        let event_result = serde_json::from_str::<VertexAiResponse>(&sse_event.data);
+        let response = match event_result {
+            Ok(event) => event,
+            Err(e) => return Some(Err(anyhow!("Failed to parse stream event: {}", e))),
+        };
+
+        if response.candidates[0].finish_reason.is_some() {
+            self.done = true;
+        }
+
+        Some(Ok(response))
+    }
 }
 
 pub struct VertexAiClient {
@@ -178,18 +230,44 @@ impl VertexAiClient {
         }
     }
 
+    fn generate_url(&self, model: VertexAiModel, method: &str) -> String {
+        format!(
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/{}/locations/us-central1/publishers/google/models/{}:{}?alt=sse",
+            self.project_id,
+            model,
+            method
+        )
+    }
+
     pub fn create_chat_completion(
         &self,
         request: VertexAiRequest,
         model: VertexAiModel,
     ) -> anyhow::Result<VertexAiResponse> {
-        let url = format!("https://us-central1-aiplatform.googleapis.com/v1/projects/{}/locations/us-central1/publishers/google/models/{}:generateContent", self.project_id, model);
+        let url = self.generate_url(model, "generateContent");
         let response = ureq::post(&url)
             .set("Authorization", &format!("Bearer {}", self.api_key))
             .set("Content-Type", "application/json")
             .send_json(&request)?;
         let completion = response.into_json::<VertexAiResponse>()?;
         Ok(completion)
+    }
+
+    pub fn stream_chat_completion(
+        &self,
+        request: VertexAiRequest,
+        model: VertexAiModel,
+    ) -> anyhow::Result<VertexAiStreamResponseIterator> {
+        let url = self.generate_url(model, "streamGenerateContent");
+
+        let response = ureq::post(&url)
+            .set("Authorization", &format!("Bearer {}", self.api_key))
+            .set("Content-Type", "application/json")
+            .send_json(&request)?;
+
+        Ok(VertexAiStreamResponseIterator::new(SseReader::new(
+            Box::new(response.into_reader()),
+        )))
     }
 
     fn convert_to_standard_role(role: Option<Role>) -> super::Role {
