@@ -11,16 +11,10 @@ use crate::{
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub enum VertexAiModel {
     #[default]
-    #[serde(rename = "gemini-2.0-flash-exp")]
-    Gemini20Flash,
-    #[serde(rename = "gemini-exp-1206")]
-    GeminiExp,
-    #[serde(rename = "gemini-2.0-flash-thinking-exp-01-21")]
-    Gemini20FlashThinking,
-    #[serde(rename = "gemini-1.5-flash-002")]
-    Gemini15Flash,
-    #[serde(rename = "gemini-1.5-pro-002")]
-    Gemini15Pro,
+    #[serde(rename = "gemini-2.5-flash-preview-04-17")]
+    Gemini25Flash,
+    #[serde(rename = "gemini-2.5-pro-preview-03-25")]
+    Gemini25Pro,
 }
 
 impl fmt::Display for VertexAiModel {
@@ -107,6 +101,15 @@ pub struct GenerationConfig {
     pub logprobs: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_timestamp: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_config: Option<ThinkingConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThinkingConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget: Option<i32>,
 }
 
 #[allow(dead_code)]
@@ -232,7 +235,7 @@ impl VertexAiClient {
 
     fn generate_url(&self, model: VertexAiModel, method: &str) -> String {
         format!(
-            "https://us-central1-aiplatform.googleapis.com/v1/projects/{}/locations/us-central1/publishers/google/models/{}:{}?alt=sse",
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/{}/locations/us-central1/publishers/google/models/{}:{}",
             self.project_id,
             model,
             method
@@ -258,7 +261,7 @@ impl VertexAiClient {
         request: VertexAiRequest,
         model: VertexAiModel,
     ) -> anyhow::Result<VertexAiStreamResponseIterator> {
-        let url = self.generate_url(model, "streamGenerateContent");
+        let url = self.generate_url(model, "streamGenerateContent?alt=sse");
 
         let response = ureq::post(&url)
             .set("Authorization", &format!("Bearer {}", self.api_key))
@@ -280,9 +283,9 @@ impl VertexAiClient {
 
     fn model_from_model_type(model_type: super::ModelType) -> VertexAiModel {
         match model_type {
-            super::ModelType::Small => VertexAiModel::Gemini20Flash,
-            super::ModelType::Large => VertexAiModel::GeminiExp,
-            super::ModelType::Thinking => VertexAiModel::Gemini20FlashThinking,
+            super::ModelType::Small => VertexAiModel::Gemini25Flash,
+            super::ModelType::Large => VertexAiModel::Gemini25Pro,
+            super::ModelType::Thinking => VertexAiModel::Gemini25Pro,
         }
     }
 }
