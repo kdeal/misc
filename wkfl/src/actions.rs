@@ -393,28 +393,66 @@ pub fn stream_anthropic_query(maybe_query: Option<String>, config: Config) -> an
     Ok(())
 }
 
-pub fn stream_vertex_ai_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
+fn print_grounding_chunks(grounding_chunks: &[vertex_ai::GroundingChunk]) {
+    if grounding_chunks.is_empty() {
+        return;
+    }
+    println!(); // Add empty line before citations
+    grounding_chunks
+        .iter()
+        .enumerate()
+        .for_each(|(i, grounding_chunk)| {
+            println!(
+                "[{}] = {}",
+                i,
+                Link::new(&grounding_chunk.web.title, &grounding_chunk.web.uri)
+            );
+        });
+}
+
+pub fn stream_vertex_ai_query(
+    maybe_query: Option<String>,
+    enable_search: bool,
+    config: Config,
+) -> anyhow::Result<()> {
     let query = llm::get_query(maybe_query)?;
     let client = vertex_ai::VertexAiClient::from_config(config)?;
-    let request = vertex_ai::VertexAiRequest {
+    let mut request = vertex_ai::VertexAiRequest {
         contents: vec![vertex_ai::Content {
             role: Some(vertex_ai::Role::User),
             parts: vec![vertex_ai::Part { text: query }],
         }],
         ..vertex_ai::VertexAiRequest::default()
     };
+    if enable_search {
+        request.tools = Some(vec![vertex_ai::GoogleSearchTool::default()]);
+    }
 
     let stream = client.stream_chat_completion(request, vertex_ai::VertexAiModel::default())?;
 
+    let mut last_grounding_chunks = Vec::new();
+
     for event_result in stream {
         let event = event_result?;
-        let text = &event.candidates[0].content.parts[0].text;
-        print!("{}", text);
+
+        let candidate = &event.candidates[0];
+
+        print!("{}", candidate.content.parts[0].text);
         // Flush stdout to see incremental updates
         std::io::stdout().flush().unwrap_or_default();
+
+        if let Some(grounding_metadata) = &candidate.grounding_metadata {
+            if !grounding_metadata.grounding_chunks.is_empty() {
+                last_grounding_chunks = grounding_metadata.grounding_chunks.clone();
+            }
+        }
     }
 
-    println!(); // Add a newline at the end
+    println!();
+
+    // Process citations from the saved grounding chunks
+    print_grounding_chunks(&last_grounding_chunks);
+
     Ok(())
 }
 
@@ -438,17 +476,7 @@ pub fn run_vertex_ai_query(
     let result = client.create_chat_completion(request, vertex_ai::VertexAiModel::default())?;
     let candidate = &result.candidates[0];
     if let Some(grounding_metadata) = &candidate.grounding_metadata {
-        grounding_metadata
-            .grounding_chunks
-            .iter()
-            .enumerate()
-            .for_each(|(i, grounding_chunk)| {
-                println!(
-                    "[{}] = {}",
-                    i,
-                    Link::new(&grounding_chunk.web.title, &grounding_chunk.web.uri)
-                );
-            });
+        print_grounding_chunks(&grounding_metadata.grounding_chunks);
     }
     println!("{}", candidate.content.parts[0].text);
     Ok(())
