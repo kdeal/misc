@@ -139,7 +139,7 @@ pub struct GroundingMetadata {
     pub grounding_supports: Vec<GroundingSupport>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GroundingChunk {
     pub web: super::Source,
@@ -158,9 +158,14 @@ pub struct GroundingSupport {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroundingSupportSegment {
+    #[serde(default = "default_grounding_start_index")]
     pub start_index: usize,
     pub end_index: usize,
     pub text: String,
+}
+
+fn default_grounding_start_index() -> usize {
+    0
 }
 
 #[allow(dead_code)]

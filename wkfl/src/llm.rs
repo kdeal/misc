@@ -61,7 +61,7 @@ pub struct CitationMetadata {
     pub supports: Vec<Support>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Source {
     pub title: String,
     pub uri: String,

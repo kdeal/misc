@@ -201,7 +201,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 stream,
             } => {
                 if stream {
-                    actions::stream_vertex_ai_query(query, context.config)?
+                    actions::stream_vertex_ai_query(query, enable_search, context.config)?
                 } else {
                     actions::run_vertex_ai_query(query, enable_search, context.config)?
                 }
