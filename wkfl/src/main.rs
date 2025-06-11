@@ -7,6 +7,7 @@ use llm::ModelType;
 use notes::DailyNoteSpecifier;
 
 mod actions;
+mod clients;
 mod config;
 mod git;
 mod llm;
@@ -37,6 +38,8 @@ enum Commands {
     Repo,
     Config,
     Clone,
+    /// List all local branches and delete those whose pull request has been merged
+    PruneBranches,
     Confirm {
         #[arg(value_hint = ValueHint::Other)]
         prompt: Option<String>,
@@ -149,6 +152,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::Repos => actions::list_repositories(context.config)?,
         Commands::Repo => actions::switch_repo(&mut context)?,
         Commands::Clone => actions::clone_repo(&mut context)?,
+        Commands::PruneBranches => actions::prune_merged_branches(&context.config)?,
         Commands::Config => actions::print_config(context.config),
         Commands::Confirm {
             prompt: user_prompt,
