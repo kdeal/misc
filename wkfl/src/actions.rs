@@ -32,10 +32,8 @@ use crate::utils;
 use crate::utils::run_commands;
 use crate::Context;
 
-/// Determine the GitHub API base URL (always HTTPS) from a remote URL.
-/// For 'github.com' returns 'https://api.github.com',
-/// otherwise 'https://{host}/api/v3'.
-fn github_api_base_from_remote_url(remote_url: &str) -> anyhow::Result<String> {
+/// Determine the host name from a remote URL.
+fn host_from_remote_url(remote_url: &str) -> anyhow::Result<String> {
     let host = if remote_url.starts_with("git@") {
         remote_url
             .split_once('@')
@@ -55,27 +53,19 @@ fn github_api_base_from_remote_url(remote_url: &str) -> anyhow::Result<String> {
             ))?
             .to_string()
     };
-    let api_base = if host == "github.com" {
-        "https://api.github.com".to_string()
-    } else {
-        format!("https://{}/api/v3", host)
-    };
-    Ok(api_base)
+
+    Ok(host)
 }
 
 /// Parse owner and repository name from a remote URL
 fn extract_owner_repo_from_url(remote_url: &str) -> anyhow::Result<(String, String)> {
     let owner_repo = extract_repo_from_url(remote_url)?;
-    let mut parts = owner_repo.splitn(2, '/');
-    let owner = parts.next().unwrap_or("").to_string();
-    let repo = parts
-        .next()
-        .ok_or(anyhow::anyhow!(
-            "Unable to parse owner and repo from '{}'",
-            owner_repo
-        ))?
-        .to_string();
-    Ok((owner, repo))
+    let parts = owner_repo.split_once('/');
+    let (owner, repo) = parts.ok_or(anyhow::anyhow!(
+        "Unable to parse owner and repo from '{}'",
+        owner_repo
+    ))?;
+    Ok((owner.to_string(), repo.to_string()))
 }
 
 pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
@@ -216,21 +206,18 @@ pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
 
     let (owner, repo_name) = extract_owner_repo_from_url(remote_url)?;
     // Determine API base URL and authentication token for this host
-    let api_base = github_api_base_from_remote_url(remote_url)?;
-    let parsed = Url::parse(remote_url)?;
-    let host = parsed
-        .host_str()
-        .ok_or(anyhow!("Failed to parse host from '{}'", remote_url))?;
+    let host = host_from_remote_url(remote_url)?;
     let token_value = config
         .github_tokens
-        .get(host)
+        .get(&host)
         .ok_or(anyhow!("No GitHub token configured for host '{}'", host))?;
     let token = resolve_secret(token_value)?;
-    let gh_client = GitHubClient::new(api_base, token);
+    let gh_client = GitHubClient::new(host, token);
 
     // Determine default branch name to avoid deleting it
     let default_branch = git::get_default_branch(&repo)?;
     let branches = repo.branches(Some(git2::BranchType::Local))?;
+    let mut branches_to_delete: Vec<String> = vec![];
     for branch_info in branches {
         let (branch, _) = branch_info?;
         let branch_name = branch
@@ -279,7 +266,10 @@ pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
             println!("  Pull request {} not merged", pr_link);
             continue;
         }
-        git::remove_branch(&repo, branch_name)?;
+        branches_to_delete.push(branch_name.to_string())
+    }
+    for branch_name in branches_to_delete {
+        git::remove_branch(&repo, &branch_name)?;
     }
     Ok(())
 }
@@ -689,36 +679,34 @@ pub fn run_chat(
 mod tests {
     use super::extract_owner_repo_from_url;
     use super::extract_repo_from_url;
-    use super::github_api_base_from_remote_url;
+    use super::host_from_remote_url;
 
     #[test]
-    fn test_github_api_base_from_remote_url_github_com() {
+    fn test_host_from_remote_url_github_com() {
         let url = "git@github.com:owner/repo.git";
-        let api = github_api_base_from_remote_url(url).unwrap();
-        assert_eq!(api, "https://api.github.com");
+        let host = host_from_remote_url(url).unwrap();
+        assert_eq!(host, "github.com");
     }
 
     #[test]
-    fn test_github_api_base_from_remote_url_enterprise() {
+    fn test_host_from_remote_url_enterprise() {
         let url = "git@github.example.com:owner/repo.git";
-        let api = github_api_base_from_remote_url(url).unwrap();
-        assert_eq!(api, "https://github.example.com/api/v3");
+        let host = host_from_remote_url(url).unwrap();
+        assert_eq!(host, "github.example.com");
     }
 
     #[test]
-    fn test_github_api_base_from_remote_url_https_url() {
-        // HTTPS URL for github.com should map to api.github.com
+    fn test_host_from_remote_url_https_url() {
         let url = "https://github.com/owner/repo.git";
-        let api = github_api_base_from_remote_url(url).unwrap();
-        assert_eq!(api, "https://api.github.com");
+        let host = host_from_remote_url(url).unwrap();
+        assert_eq!(host, "github.com");
     }
 
     #[test]
-    fn test_github_api_base_from_remote_url_http_url_enterprise() {
-        // HTTP URL for enterprise host should map to https://host/api/v3
+    fn test_host_from_remote_url_http_url_enterprise() {
         let url = "http://github.example.com/owner/repo";
-        let api = github_api_base_from_remote_url(url).unwrap();
-        assert_eq!(api, "https://github.example.com/api/v3");
+        let host = host_from_remote_url(url).unwrap();
+        assert_eq!(host, "github.example.com");
     }
 
     #[test]

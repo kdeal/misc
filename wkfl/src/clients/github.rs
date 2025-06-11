@@ -20,7 +20,12 @@ pub struct GitHubClient {
 
 impl GitHubClient {
     /// Create a new GitHub client
-    pub fn new(api_base: String, token: String) -> Self {
+    pub fn new(host: String, token: String) -> Self {
+        let api_base = if host == "github.com" {
+            "https://api.github.com".to_string()
+        } else {
+            format!("https://{}/api/v3", host)
+        };
         GitHubClient { api_base, token }
     }
 
@@ -36,13 +41,7 @@ impl GitHubClient {
             let mut segments = url
                 .path_segments_mut()
                 .map_err(|_| anyhow!("Failed to set URL path segments"))?;
-            segments
-                .push("repos")
-                .push(owner)
-                .push(repo)
-                .push("commits")
-                .push(commit_sha)
-                .push("pulls");
+            segments.extend(&["repos", owner, repo, "commits", commit_sha, "pulls"]);
         }
         let resp = ureq::get(url.as_str())
             .set("Authorization", &format!("Bearer {}", &self.token))
