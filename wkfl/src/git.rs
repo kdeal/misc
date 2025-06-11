@@ -20,7 +20,7 @@ pub fn uses_worktrees(repo: &Repository) -> bool {
     repo.is_worktree() || repo.is_bare()
 }
 
-fn get_default_branch(repo: &Repository) -> anyhow::Result<String> {
+pub fn get_default_branch(repo: &Repository) -> anyhow::Result<String> {
     let head_ref = repo.find_reference("refs/remotes/origin/HEAD")?;
     let default_branch_ref = head_ref.symbolic_target().ok_or(anyhow::anyhow!(
         "origin/HEAD doesn't point to branch, can't determine default branch"

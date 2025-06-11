@@ -9,6 +9,7 @@ use clap::ValueEnum;
 use home::home_dir;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::llm::{
     anthropic::AnthropicClient, perplexity::PerplexityClient, vertex_ai::VertexAiClient, Chat,
@@ -62,6 +63,9 @@ pub struct Config {
     pub anthropic_api_key: Option<String>,
     pub perplexity_api_key: Option<String>,
     pub vertex_ai: Option<VertexAiConfig>,
+    /// GitHub API tokens mapped by host (e.g., github.com or github.example.com)
+    #[serde(default)]
+    pub github_tokens: HashMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

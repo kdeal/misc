@@ -5,6 +5,7 @@ use std::io;
 use std::io::Write;
 use url::Url;
 
+use crate::clients::github::GitHubClient;
 use crate::config::get_repo_config;
 use crate::config::resolve_secret;
 use crate::config::ChatProvider;
@@ -30,6 +31,52 @@ use crate::shell_actions::ShellAction;
 use crate::utils;
 use crate::utils::run_commands;
 use crate::Context;
+
+/// Determine the GitHub API base URL (always HTTPS) from a remote URL.
+/// For 'github.com' returns 'https://api.github.com',
+/// otherwise 'https://{host}/api/v3'.
+fn github_api_base_from_remote_url(remote_url: &str) -> anyhow::Result<String> {
+    let host = if remote_url.starts_with("git@") {
+        remote_url
+            .split_once('@')
+            .unwrap()
+            .1
+            .split_once(':')
+            .unwrap()
+            .0
+            .to_string()
+    } else {
+        let parsed = Url::parse(remote_url)?;
+        parsed
+            .host_str()
+            .ok_or(anyhow::anyhow!(
+                "Failed to parse host from '{}'",
+                remote_url
+            ))?
+            .to_string()
+    };
+    let api_base = if host == "github.com" {
+        "https://api.github.com".to_string()
+    } else {
+        format!("https://{}/api/v3", host)
+    };
+    Ok(api_base)
+}
+
+/// Parse owner and repository name from a remote URL
+fn extract_owner_repo_from_url(remote_url: &str) -> anyhow::Result<(String, String)> {
+    let owner_repo = extract_repo_from_url(remote_url)?;
+    let mut parts = owner_repo.splitn(2, '/');
+    let owner = parts.next().unwrap_or("").to_string();
+    let repo = parts
+        .next()
+        .ok_or(anyhow::anyhow!(
+            "Unable to parse owner and repo from '{}'",
+            owner_repo
+        ))?
+        .to_string();
+    Ok((owner, repo))
+}
 
 pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
@@ -156,6 +203,84 @@ pub fn clone_repo(context: &mut Context) -> anyhow::Result<()> {
     context
         .shell_actions
         .push(ShellAction::Cd { path: repo_path });
+    Ok(())
+}
+
+/// List all local branches and delete those whose pull request has been merged
+pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
+    let repo = git::get_repository()?;
+    let remote = repo.find_remote("origin")?;
+    let remote_url = remote
+        .url()
+        .ok_or(anyhow::anyhow!("Remote 'origin' has no URL"))?;
+
+    let (owner, repo_name) = extract_owner_repo_from_url(remote_url)?;
+    // Determine API base URL and authentication token for this host
+    let api_base = github_api_base_from_remote_url(remote_url)?;
+    let parsed = Url::parse(remote_url)?;
+    let host = parsed
+        .host_str()
+        .ok_or(anyhow!("Failed to parse host from '{}'", remote_url))?;
+    let token_value = config
+        .github_tokens
+        .get(host)
+        .ok_or(anyhow!("No GitHub token configured for host '{}'", host))?;
+    let token = resolve_secret(token_value)?;
+    let gh_client = GitHubClient::new(api_base, token);
+
+    // Determine default branch name to avoid deleting it
+    let default_branch = git::get_default_branch(&repo)?;
+    let branches = repo.branches(Some(git2::BranchType::Local))?;
+    for branch_info in branches {
+        let (branch, _) = branch_info?;
+        let branch_name = branch
+            .name()?
+            .ok_or(anyhow::anyhow!("Branch name not valid UTF-8"))?;
+
+        if branch.is_head() {
+            continue;
+        }
+
+        println!("Branch: {}", branch_name);
+        // Skip the default branch to prevent accidental deletion
+        if branch_name == default_branch {
+            println!("  Default branch '{}', skipping", branch_name);
+            continue;
+        }
+        // Get head commit SHA of this branch
+        let reference = branch.get();
+        let oid = reference
+            .target()
+            .ok_or(anyhow::anyhow!("Branch should point to a commit"))?;
+        let sha = oid.to_string();
+        // Query GitHub for pull requests associated with this commit
+        let prs = match gh_client.get_pull_requests_for_commit(&owner, &repo_name, &sha) {
+            Ok(prs) => prs,
+            Err(e) => {
+                println!("  Failed to query GitHub API: {}", e);
+                continue;
+            }
+        };
+        if prs.is_empty() {
+            println!("  No pull request found");
+            continue;
+        }
+        // Check if any PR is merged
+        if let Some(pr) = prs.iter().find(|pr| pr.merged_at.is_some()) {
+            // Use HTML URL from GitHub response for link
+            let pr_text = format!("#{}", pr.number);
+            let pr_link = Link::new(&pr_text, &pr.html_url);
+            println!("  Pull request {} merged, deleting branch", pr_link);
+        } else {
+            // First PR not merged
+            let pr0 = &prs[0];
+            let pr_text = format!("#{}", pr0.number);
+            let pr_link = Link::new(&pr_text, &pr0.html_url);
+            println!("  Pull request {} not merged", pr_link);
+            continue;
+        }
+        git::remove_branch(&repo, branch_name)?;
+    }
     Ok(())
 }
 
@@ -558,4 +683,78 @@ pub fn run_chat(
 
     println!("{}", result.message.content);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_owner_repo_from_url;
+    use super::extract_repo_from_url;
+    use super::github_api_base_from_remote_url;
+
+    #[test]
+    fn test_github_api_base_from_remote_url_github_com() {
+        let url = "git@github.com:owner/repo.git";
+        let api = github_api_base_from_remote_url(url).unwrap();
+        assert_eq!(api, "https://api.github.com");
+    }
+
+    #[test]
+    fn test_github_api_base_from_remote_url_enterprise() {
+        let url = "git@github.example.com:owner/repo.git";
+        let api = github_api_base_from_remote_url(url).unwrap();
+        assert_eq!(api, "https://github.example.com/api/v3");
+    }
+
+    #[test]
+    fn test_github_api_base_from_remote_url_https_url() {
+        // HTTPS URL for github.com should map to api.github.com
+        let url = "https://github.com/owner/repo.git";
+        let api = github_api_base_from_remote_url(url).unwrap();
+        assert_eq!(api, "https://api.github.com");
+    }
+
+    #[test]
+    fn test_github_api_base_from_remote_url_http_url_enterprise() {
+        // HTTP URL for enterprise host should map to https://host/api/v3
+        let url = "http://github.example.com/owner/repo";
+        let api = github_api_base_from_remote_url(url).unwrap();
+        assert_eq!(api, "https://github.example.com/api/v3");
+    }
+
+    #[test]
+    fn test_extract_repo_from_url_git_ssh() {
+        let url = "git@github.com:owner/repo.git";
+        let repo = extract_repo_from_url(url).unwrap();
+        assert_eq!(repo, "owner/repo");
+    }
+
+    #[test]
+    fn test_extract_repo_from_url_https() {
+        let url = "https://github.com/owner/repo.git";
+        let repo = extract_repo_from_url(url).unwrap();
+        assert_eq!(repo, "owner/repo");
+    }
+
+    #[test]
+    fn test_extract_owner_repo_basic() {
+        let url = "git@github.com:alice/project.git";
+        let (owner, repo) = extract_owner_repo_from_url(url).unwrap();
+        assert_eq!(owner, "alice");
+        assert_eq!(repo, "project");
+    }
+
+    #[test]
+    fn test_extract_owner_repo_http() {
+        let url = "https://github.com/bob/tool";
+        let (owner, repo) = extract_owner_repo_from_url(url).unwrap();
+        assert_eq!(owner, "bob");
+        assert_eq!(repo, "tool");
+    }
+
+    #[test]
+    fn test_extract_owner_repo_error() {
+        // Missing slash
+        let url = "https://github.com/onlyowner";
+        assert!(extract_owner_repo_from_url(url).is_err());
+    }
 }
