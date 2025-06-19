@@ -456,6 +456,8 @@ fn select_handle_key(
                 return Ok(true);
             }
         }
+        (_, KeyCode::Up, KeyModifiers::NONE) => state.previous_item(),
+        (_, KeyCode::Down, KeyModifiers::NONE) => state.next_item(),
         (PromptMode::Normal, KeyCode::Char('j'), KeyModifiers::NONE) => state.next_item(),
         (PromptMode::Normal, KeyCode::Char('k'), KeyModifiers::NONE) => state.previous_item(),
         (PromptMode::Insert, KeyCode::Char('n'), KeyModifiers::CONTROL) => state.next_item(),
