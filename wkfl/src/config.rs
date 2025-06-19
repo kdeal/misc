@@ -79,6 +79,8 @@ pub struct RepoConfig {
     pub pre_end_commands: Vec<String>,
     #[serde(default)]
     pub post_end_commands: Vec<String>,
+    #[serde(default)]
+    pub test_commands: Vec<String>,
 }
 
 impl RepoConfig {

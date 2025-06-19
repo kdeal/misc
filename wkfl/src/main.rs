@@ -40,6 +40,8 @@ enum Commands {
     Clone,
     /// List all local branches and delete those whose pull request has been merged
     PruneBranches,
+    /// Run test commands defined in repo config
+    Test,
     Confirm {
         #[arg(value_hint = ValueHint::Other)]
         prompt: Option<String>,
@@ -153,6 +155,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::Repo => actions::switch_repo(&mut context)?,
         Commands::Clone => actions::clone_repo(&mut context)?,
         Commands::PruneBranches => actions::prune_merged_branches(&context.config)?,
+        Commands::Test => actions::run_test_commands(&mut context)?,
         Commands::Config => actions::print_config(context.config),
         Commands::Confirm {
             prompt: user_prompt,
