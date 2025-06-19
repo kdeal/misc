@@ -675,6 +675,34 @@ pub fn run_chat(
     Ok(())
 }
 
+pub fn run_test_commands(_context: &mut Context) -> anyhow::Result<()> {
+    let repo = git::get_repository()?;
+    let repo_root = determine_repo_root_dir(&repo);
+    let repo_config = get_repo_config(repo_root)?;
+
+    if repo_config.test_commands.is_empty() {
+        println!("No test commands configured in .git/info/wkfl.toml");
+        return Ok(());
+    }
+
+    utils::run_test_commands(&repo_config.test_commands)?;
+    Ok(())
+}
+
+pub fn run_fmt_commands(_context: &mut Context) -> anyhow::Result<()> {
+    let repo = git::get_repository()?;
+    let repo_root = determine_repo_root_dir(&repo);
+    let repo_config = get_repo_config(repo_root)?;
+
+    if repo_config.fmt_commands.is_empty() {
+        println!("No fmt commands configured in .wkfl.toml");
+        return Ok(());
+    }
+
+    utils::run_test_commands(&repo_config.fmt_commands)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::extract_owner_repo_from_url;
