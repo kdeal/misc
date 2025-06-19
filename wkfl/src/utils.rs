@@ -1,4 +1,8 @@
-use std::{env, process::Command};
+use std::{
+    env,
+    io::{self, Write},
+    process::Command,
+};
 
 // Uses the same vars as getpass.getuser in python
 pub fn get_current_user() -> Option<String> {
@@ -14,6 +18,35 @@ pub fn run_commands(commands: &Vec<String>) -> anyhow::Result<()> {
     for command in commands {
         Command::new("sh").arg("-c").arg(command).status()?;
     }
+    Ok(())
+}
+
+pub fn run_test_commands(commands: &Vec<String>) -> anyhow::Result<()> {
+    for command in commands {
+        println!("\x1b[1;33m> {}\x1b[0m", command);
+        io::stdout().flush()?;
+
+        let status = Command::new("sh").arg("-c").arg(command).status()?;
+
+        if !status.success() {
+            send_notification("❌ Test command failed", true)?;
+            return Err(anyhow::anyhow!("Command failed: {}", command));
+        }
+    }
+
+    send_notification("✓ All commands completed successfully", false)?;
+    Ok(())
+}
+
+pub fn send_notification(message: &str, is_error: bool) -> anyhow::Result<()> {
+    let color = if is_error { "\x1b[31m" } else { "\x1b[32m" };
+    let reset = "\x1b[0m";
+
+    // OSC 9 for system notification: ESC ] 9 ; [message] ESC \
+    let osc_notification = format!("\x1b]9;{}\x1b\\", message);
+
+    println!("{}{}{}{}", color, message, reset, osc_notification);
+    io::stdout().flush()?;
     Ok(())
 }
 
