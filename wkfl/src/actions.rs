@@ -681,11 +681,11 @@ pub fn run_test_commands(_context: &mut Context) -> anyhow::Result<()> {
     let repo_config = get_repo_config(repo_root)?;
 
     if repo_config.test_commands.is_empty() {
-        println!("No test commands configured in .git/info/wkfl.toml");
+        println!("No test commands configured in repository config");
         return Ok(());
     }
 
-    utils::run_test_commands(&repo_config.test_commands)?;
+    utils::run_commands_with_output(&repo_config.test_commands)?;
     Ok(())
 }
 
@@ -695,11 +695,11 @@ pub fn run_fmt_commands(_context: &mut Context) -> anyhow::Result<()> {
     let repo_config = get_repo_config(repo_root)?;
 
     if repo_config.fmt_commands.is_empty() {
-        println!("No fmt commands configured in .wkfl.toml");
+        println!("No fmt commands configured in repository config");
         return Ok(());
     }
 
-    utils::run_test_commands(&repo_config.fmt_commands)?;
+    utils::run_commands_with_output(&repo_config.fmt_commands)?;
     Ok(())
 }
 

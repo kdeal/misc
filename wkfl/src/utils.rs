@@ -4,6 +4,8 @@ use std::{
     process::Command,
 };
 
+use crossterm::style::Stylize;
+
 // Uses the same vars as getpass.getuser in python
 pub fn get_current_user() -> Option<String> {
     for env_var in ["LOGNAME", "USER", "LNAME", "USERNAME"] {
@@ -21,15 +23,15 @@ pub fn run_commands(commands: &Vec<String>) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_test_commands(commands: &Vec<String>) -> anyhow::Result<()> {
+pub fn run_commands_with_output(commands: &Vec<String>) -> anyhow::Result<()> {
     for command in commands {
-        println!("\x1b[1;33m> {}\x1b[0m", command);
+        println!("{}", command.as_str().yellow());
         io::stdout().flush()?;
 
         let status = Command::new("sh").arg("-c").arg(command).status()?;
 
         if !status.success() {
-            send_notification("❌ Test command failed", true)?;
+            send_notification("✖ Command failed", true)?;
             return Err(anyhow::anyhow!("Command failed: {}", command));
         }
     }
@@ -39,13 +41,16 @@ pub fn run_test_commands(commands: &Vec<String>) -> anyhow::Result<()> {
 }
 
 pub fn send_notification(message: &str, is_error: bool) -> anyhow::Result<()> {
-    let color = if is_error { "\x1b[31m" } else { "\x1b[32m" };
-    let reset = "\x1b[0m";
+    let colorized_message = if is_error {
+        message.red()
+    } else {
+        message.green()
+    };
 
     // OSC 9 for system notification: ESC ] 9 ; [message] ESC \
     let osc_notification = format!("\x1b]9;{}\x1b\\", message);
 
-    println!("{}{}{}{}", color, message, reset, osc_notification);
+    println!("{}{}", colorized_message, osc_notification);
     io::stdout().flush()?;
     Ok(())
 }
