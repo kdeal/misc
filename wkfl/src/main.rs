@@ -11,6 +11,7 @@ mod clients;
 mod config;
 mod git;
 mod llm;
+mod mcp;
 mod notes;
 mod prompts;
 mod repositories;
@@ -81,6 +82,8 @@ enum Commands {
         #[arg(short, long, value_enum, default_value_t)]
         model_type: ModelType,
     },
+    /// Start MCP server
+    Mcp,
 }
 
 #[derive(Subcommand, Debug)]
@@ -233,6 +236,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             model_type,
             model_provider,
         } => actions::run_chat(query, model_type, model_provider, context.config)?,
+        Commands::Mcp => {
+            let server = mcp::McpServer::new();
+            server.run()?
+        }
     };
 
     if let Some(shell_actions_file) = cli.shell_actions_file {
