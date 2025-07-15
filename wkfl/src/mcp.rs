@@ -499,9 +499,7 @@ impl McpServer {
                 let commands = extract_commands(&config);
                 Self::create_success_result(commands, command_type)
             }
-            Err(e) => {
-                Self::create_error_result(&format!("Failed to load repository config: {e}"))
-            }
+            Err(e) => Self::create_error_result(&format!("Failed to load repository config: {e}")),
         }
     }
 
