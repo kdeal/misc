@@ -313,7 +313,7 @@ impl McpServer {
             let message: JSONRPCMessage = match serde_json::from_str(&line) {
                 Ok(msg) => msg,
                 Err(e) => {
-                    eprintln!("Failed to parse JSON-RPC message: {}", e);
+                    eprintln!("Failed to parse JSON-RPC message: {e}");
                     continue;
                 }
             };
@@ -321,7 +321,7 @@ impl McpServer {
             let response = self.handle_message(message);
             if let Some(response) = response {
                 let response_json = serde_json::to_string(&response)?;
-                writeln!(stdout, "{}", response_json)?;
+                writeln!(stdout, "{response_json}")?;
                 stdout.flush()?;
             }
         }
@@ -407,7 +407,7 @@ impl McpServer {
             _ => CallToolResult {
                 content: vec![TextContent {
                     content_type: "text".to_string(),
-                    text: format!("Unknown tool: {}", tool_name),
+                    text: format!("Unknown tool: {tool_name}"),
                 }],
                 is_error: Some(true),
                 structured_content: Some(json!({
@@ -450,9 +450,9 @@ impl McpServer {
 
     fn create_success_result(commands: Vec<String>, command_type: &str) -> CallToolResult {
         let message = if commands.is_empty() {
-            format!("No {} commands configured in .wkfl.toml", command_type)
+            format!("No {command_type} commands configured in .wkfl.toml")
         } else {
-            format!("{} commands retrieved successfully", command_type)
+            format!("{command_type} commands retrieved successfully")
         };
 
         CallToolResult {
@@ -500,7 +500,7 @@ impl McpServer {
                 Self::create_success_result(commands, command_type)
             }
             Err(e) => {
-                Self::create_error_result(&format!("Failed to load repository config: {}", e))
+                Self::create_error_result(&format!("Failed to load repository config: {e}"))
             }
         }
     }

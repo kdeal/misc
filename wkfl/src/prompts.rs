@@ -356,7 +356,7 @@ fn update_cursor(state: &PromptState, stderr: &mut dyn Write) -> anyhow::Result<
 
 pub fn basic_prompt(prompt: &str) -> anyhow::Result<String> {
     let mut stderr = io::stderr();
-    eprint!("{} ", prompt);
+    eprint!("{prompt} ");
     stderr.flush()?;
 
     let input_start = u16::try_from(prompt.len() + 1)?;
@@ -540,7 +540,7 @@ fn filter_options<'a>(filter: &str, options: &'a [String]) -> Vec<&'a String> {
 
 pub fn select_prompt<'a>(prompt: &str, options: &'a [String]) -> anyhow::Result<&'a str> {
     let mut stderr = io::stderr();
-    eprint!("{} ", prompt);
+    eprint!("{prompt} ");
     stderr.flush()?;
 
     let items_shown = MAX_OPTIONS_SHOWN.min(options.len());
@@ -640,7 +640,7 @@ pub fn boolean_prompt(prompt: &str, default: bool) -> anyhow::Result<bool> {
     let mut stderr = io::stderr();
     let mut state = default;
 
-    eprint!("{} ", prompt);
+    eprint!("{prompt} ");
 
     enable_raw_mode()?;
     stderr.queue(cursor::SavePosition)?.queue(cursor::Hide)?;

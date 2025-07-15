@@ -36,7 +36,7 @@ fn get_path_for_topic(topic_name: &str) -> String {
         .to_lowercase()
         .replace(" ", "_")
         .replace("-", "_");
-    format!("topics/{}.md", name_in_path)
+    format!("topics/{name_in_path}.md")
 }
 
 fn get_path_for_person(topic_name: &str) -> String {
@@ -44,7 +44,7 @@ fn get_path_for_person(topic_name: &str) -> String {
         .to_lowercase()
         .replace(" ", "_")
         .replace("-", "_");
-    format!("people/{}.md", name_in_path)
+    format!("people/{name_in_path}.md")
 }
 
 fn date_from_note_specifier(note_specifier: &DailyNoteSpecifier) -> Date {
@@ -75,9 +75,9 @@ pub fn note_template(note_specifier: &NoteSpecifier) -> String {
             let date = date_from_note_specifier(day);
             let date_str = date.format(DAILY_NOTE_TITLE_FORMAT).unwrap();
             let day_suffix = get_day_suffix(date.day());
-            format!("# {}{}\n\n## ", date_str, day_suffix)
+            format!("# {date_str}{day_suffix}\n\n## ")
         }
         NoteSpecifier::Topic { name } => format!("# {}", to_title_case(name)),
-        NoteSpecifier::Person { who } => format!("# {}", who),
+        NoteSpecifier::Person { who } => format!("# {who}"),
     }
 }

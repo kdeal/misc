@@ -24,7 +24,7 @@ impl GitHubClient {
         let api_base = if host == "github.com" {
             "https://api.github.com".to_string()
         } else {
-            format!("https://{}/api/v3", host)
+            format!("https://{host}/api/v3")
         };
         GitHubClient { api_base, token }
     }
@@ -48,7 +48,7 @@ impl GitHubClient {
             .set("User-Agent", "wkfl")
             .set("Accept", "application/vnd.github+json")
             .call()
-            .with_context(|| format!("Failed to query GitHub API for commit '{}'", commit_sha))?;
+            .with_context(|| format!("Failed to query GitHub API for commit '{commit_sha}'"))?;
         let prs: Vec<PullRequest> = resp
             .into_json()
             .with_context(|| "Failed to parse GitHub PRs response as JSON")?;

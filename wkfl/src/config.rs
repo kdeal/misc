@@ -182,7 +182,7 @@ pub fn resolve_secret(config_value: &str) -> anyhow::Result<String> {
             .arg("-c")
             .arg(cmd)
             .output()
-            .with_context(|| format!("Failed to run command: {}", cmd))?;
+            .with_context(|| format!("Failed to run command: {cmd}"))?;
         if !output.status.success() {
             bail!("Command failed: {}", cmd);
         }
@@ -193,7 +193,7 @@ pub fn resolve_secret(config_value: &str) -> anyhow::Result<String> {
         let env_var = config_value
             .strip_prefix("env::")
             .expect("We check the prefix above, so this shouldn't fail");
-        std::env::var(env_var).with_context(|| format!("{} env var doesn't exist", env_var))
+        std::env::var(env_var).with_context(|| format!("{env_var} env var doesn't exist"))
     } else if config_value.starts_with("val::") {
         let value = config_value
             .strip_prefix("val::")
