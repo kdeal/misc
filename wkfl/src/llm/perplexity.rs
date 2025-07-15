@@ -357,7 +357,7 @@ mod tests {
         let input = "This is supported by multiple sources.[0][1]";
         let (supports, cleaned_text) = extract_supports_from_text(input, &sources);
 
-        println!("{:?} - {}", supports, cleaned_text);
+        println!("{supports:?} - {cleaned_text}");
         assert_eq!(supports.len(), 1);
         assert_eq!(supports[0].text, "This is supported by multiple sources.");
         assert_eq!(supports[0].start_index, 0);

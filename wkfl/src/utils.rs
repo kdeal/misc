@@ -48,9 +48,9 @@ pub fn send_notification(message: &str, is_error: bool) -> anyhow::Result<()> {
     };
 
     // OSC 9 for system notification: ESC ] 9 ; [message] ESC \
-    let osc_notification = format!("\x1b]9;{}\x1b\\", message);
+    let osc_notification = format!("\x1b]9;{message}\x1b\\");
 
-    println!("{}{}", colorized_message, osc_notification);
+    println!("{colorized_message}{osc_notification}");
     io::stdout().flush()?;
     Ok(())
 }

@@ -228,10 +228,10 @@ pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
             continue;
         }
 
-        println!("Branch: {}", branch_name);
+        println!("Branch: {branch_name}");
         // Skip the default branch to prevent accidental deletion
         if branch_name == default_branch {
-            println!("  Default branch '{}', skipping", branch_name);
+            println!("  Default branch '{branch_name}', skipping");
             continue;
         }
         // Get head commit SHA of this branch
@@ -244,7 +244,7 @@ pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
         let prs = match gh_client.get_pull_requests_for_commit(&owner, &repo_name, &sha) {
             Ok(prs) => prs,
             Err(e) => {
-                println!("  Failed to query GitHub API: {}", e);
+                println!("  Failed to query GitHub API: {e}");
                 continue;
             }
         };
@@ -257,13 +257,13 @@ pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
             // Use HTML URL from GitHub response for link
             let pr_text = format!("#{}", pr.number);
             let pr_link = Link::new(&pr_text, &pr.html_url);
-            println!("  Pull request {} merged, deleting branch", pr_link);
+            println!("  Pull request {pr_link} merged, deleting branch");
         } else {
             // First PR not merged
             let pr0 = &prs[0];
             let pr_text = format!("#{}", pr0.number);
             let pr_link = Link::new(&pr_text, &pr0.html_url);
-            println!("  Pull request {} not merged", pr_link);
+            println!("  Pull request {pr_link} not merged");
             continue;
         }
         branches_to_delete.push(branch_name.to_string())
@@ -304,7 +304,7 @@ pub fn select(prompt: &str) -> anyhow::Result<()> {
         .filter(|s| !s.is_empty())
         .collect();
     let result = select_prompt(prompt, &options)?;
-    println!("{}", result);
+    println!("{result}");
     Ok(())
 }
 
@@ -354,7 +354,7 @@ fn open_note(note_to_open: NoteSpecifier, context: &mut Context) -> anyhow::Resu
 }
 
 pub fn print_config(config: Config) {
-    info!("config: {:?}", config);
+    info!("config: {config:?}");
 }
 
 pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyhow::Result<()> {
@@ -374,7 +374,7 @@ pub fn run_perplexity_query(maybe_query: Option<String>, config: Config) -> anyh
             &citations
                 .iter()
                 .enumerate()
-                .map(|(i, citation)| format!("[{}] = {}", i, citation))
+                .map(|(i, citation)| format!("[{i}] = {citation}"))
                 .collect::<Vec<String>>()
                 .join("\n"),
         );
@@ -404,7 +404,7 @@ pub fn stream_perplexity_query(maybe_query: Option<String>, config: Config) -> a
                     &citations
                         .iter()
                         .enumerate()
-                        .map(|(i, citation)| format!("[{}] = {}", i, citation))
+                        .map(|(i, citation)| format!("[{i}] = {citation}"))
                         .collect::<Vec<String>>()
                         .join("\n"),
                 );
@@ -414,7 +414,7 @@ pub fn stream_perplexity_query(maybe_query: Option<String>, config: Config) -> a
         // This is a nice to have, so ignore any errors it returns
         std::io::stdout().flush().unwrap_or_default();
     }
-    println!("{}", citation_text);
+    println!("{citation_text}");
     Ok(())
 }
 
@@ -440,7 +440,7 @@ pub fn run_anthropic_query(maybe_query: Option<String>, config: Config) -> anyho
         .expect("It should always return some content");
 
     if let anthropic::ContentBlock::Text { text } = content {
-        println!("{}", text);
+        println!("{text}");
     }
 
     Ok(())
@@ -470,13 +470,13 @@ pub fn stream_anthropic_query(maybe_query: Option<String>, config: Config) -> an
             anthropic::StreamEvent::ContentBlockStart { content_block, .. } => {
                 match content_block {
                     anthropic::ContentBlock::Text { text } => {
-                        print!("{}", text);
+                        print!("{text}");
                         // Flush stdout to see incremental updates
                         std::io::stdout().flush().unwrap_or_default();
                     }
                     anthropic::ContentBlock::Thinking { thinking } => {
                         // Optionally print thinking output
-                        print!("\n[Thinking] {}", thinking);
+                        print!("\n[Thinking] {thinking}");
                         std::io::stdout().flush().unwrap_or_default();
                     }
                     _ => {} // Ignore other delta types
@@ -485,13 +485,13 @@ pub fn stream_anthropic_query(maybe_query: Option<String>, config: Config) -> an
             anthropic::StreamEvent::ContentBlockDelta { delta, .. } => {
                 match delta {
                     anthropic::ContentDelta::TextDelta { text } => {
-                        print!("{}", text);
+                        print!("{text}");
                         // Flush stdout to see incremental updates
                         std::io::stdout().flush().unwrap_or_default();
                     }
                     anthropic::ContentDelta::ThinkingDelta { thinking } => {
                         // Optionally print thinking output
-                        print!("\n[Thinking] {}", thinking);
+                        print!("\n[Thinking] {thinking}");
                         std::io::stdout().flush().unwrap_or_default();
                     }
                     _ => {} // Ignore other delta types
@@ -643,7 +643,7 @@ pub fn run_web_chat(
     }
     if last_end != result.message.content.len() {
         let str_to_print = result.message.content[last_end..].to_string();
-        print!("{}", str_to_print);
+        print!("{str_to_print}");
     }
     println!("\n");
 
