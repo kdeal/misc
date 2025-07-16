@@ -45,6 +45,8 @@ enum Commands {
     Test,
     /// Run fmt commands defined in repo config
     Fmt,
+    /// Run build commands defined in repo config
+    Build,
     Confirm {
         #[arg(value_hint = ValueHint::Other)]
         prompt: Option<String>,
@@ -162,6 +164,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::PruneBranches => actions::prune_merged_branches(&context.config)?,
         Commands::Test => actions::run_test_commands(&mut context)?,
         Commands::Fmt => actions::run_fmt_commands(&mut context)?,
+        Commands::Build => actions::run_build_commands(&mut context)?,
         Commands::Config => actions::print_config(context.config),
         Commands::Confirm {
             prompt: user_prompt,

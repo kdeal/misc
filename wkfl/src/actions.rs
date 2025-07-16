@@ -703,6 +703,20 @@ pub fn run_fmt_commands(_context: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn run_build_commands(_context: &mut Context) -> anyhow::Result<()> {
+    let repo = git::get_repository()?;
+    let repo_root = determine_repo_root_dir(&repo);
+    let repo_config = get_repo_config(repo_root)?;
+
+    if repo_config.build_commands.is_empty() {
+        println!("No build commands configured in repository config");
+        return Ok(());
+    }
+
+    utils::run_commands_with_output(&repo_config.build_commands)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::extract_owner_repo_from_url;

@@ -290,6 +290,52 @@ impl McpServer {
                     required: None,
                 }),
             },
+            Tool {
+                name: "get_build_commands".to_string(),
+                title: Some("Get Build Commands".to_string()),
+                description: Some(
+                    "Get build commands configured in the repository's .wkfl.toml config"
+                        .to_string(),
+                ),
+                input_schema: ToolInputSchema {
+                    schema_type: "object".to_string(),
+                    properties: Some({
+                        let mut props = HashMap::new();
+                        props.insert(
+                            "repo_path".to_string(),
+                            json!({
+                                "type": "string",
+                                "description": "Path to the repository root directory"
+                            }),
+                        );
+                        props
+                    }),
+                    required: Some(vec!["repo_path".to_string()]),
+                },
+                output_schema: Some(ToolOutputSchema {
+                    schema_type: "object".to_string(),
+                    properties: Some({
+                        let mut props = HashMap::new();
+                        props.insert(
+                            "commands".to_string(),
+                            json!({
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of build commands"
+                            }),
+                        );
+                        props.insert(
+                            "error".to_string(),
+                            json!({
+                                "type": "string",
+                                "description": "Error message if command retrieval failed"
+                            }),
+                        );
+                        props
+                    }),
+                    required: None,
+                }),
+            },
         ];
 
         Self {
@@ -370,7 +416,7 @@ impl McpServer {
             "protocolVersion": LATEST_PROTOCOL_VERSION,
             "capabilities": self.capabilities,
             "serverInfo": self.server_info,
-            "instructions": "This is a wkfl MCP server that provides tools for retrieving test and format commands from repository configuration."
+            "instructions": "This is a wkfl MCP server that provides tools for retrieving test, format, and build commands from repository configuration."
         });
 
         let response = JSONRPCResponse {
@@ -404,6 +450,7 @@ impl McpServer {
         let result = match tool_name {
             "get_test_commands" => self.get_test_commands(arguments),
             "get_fmt_commands" => self.get_fmt_commands(arguments),
+            "get_build_commands" => self.get_build_commands(arguments),
             _ => CallToolResult {
                 content: vec![TextContent {
                     content_type: "text".to_string(),
@@ -509,5 +556,9 @@ impl McpServer {
 
     fn get_fmt_commands(&self, args: &Value) -> CallToolResult {
         self.get_commands_from_config(args, "format", |config| config.fmt_commands.clone())
+    }
+
+    fn get_build_commands(&self, args: &Value) -> CallToolResult {
+        self.get_commands_from_config(args, "build", |config| config.build_commands.clone())
     }
 }
