@@ -83,6 +83,8 @@ pub struct RepoConfig {
     pub test_commands: Vec<String>,
     #[serde(default)]
     pub fmt_commands: Vec<String>,
+    #[serde(default)]
+    pub build_commands: Vec<String>,
 }
 
 impl RepoConfig {
@@ -104,6 +106,9 @@ impl RepoConfig {
         }
         if !other.fmt_commands.is_empty() {
             self.fmt_commands = other.fmt_commands;
+        }
+        if !other.build_commands.is_empty() {
+            self.build_commands = other.build_commands;
         }
         self
     }
@@ -261,6 +266,7 @@ mod tests {
             post_end_commands: vec![],
             test_commands: vec![],
             fmt_commands: vec![],
+            build_commands: vec![],
         };
         let other = RepoConfig {
             pre_start_commands: vec![],
@@ -269,6 +275,7 @@ mod tests {
             post_end_commands: vec![],
             test_commands: vec![],
             fmt_commands: vec![],
+            build_commands: vec![],
         };
 
         let result = base.merge_with(other);
@@ -279,6 +286,7 @@ mod tests {
         assert!(result.post_end_commands.is_empty());
         assert!(result.test_commands.is_empty());
         assert!(result.fmt_commands.is_empty());
+        assert!(result.build_commands.is_empty());
     }
 
     #[test]
@@ -290,6 +298,7 @@ mod tests {
             post_end_commands: vec!["base_post_end".to_string()],
             test_commands: vec!["base_test".to_string()],
             fmt_commands: vec!["base_fmt".to_string()],
+            build_commands: vec!["base_build".to_string()],
         };
         let other = RepoConfig {
             pre_start_commands: vec![],
@@ -298,6 +307,7 @@ mod tests {
             post_end_commands: vec![],
             test_commands: vec![],
             fmt_commands: vec![],
+            build_commands: vec![],
         };
 
         let result = base.merge_with(other);
@@ -308,6 +318,7 @@ mod tests {
         assert_eq!(result.post_end_commands, vec!["base_post_end"]);
         assert_eq!(result.test_commands, vec!["base_test"]);
         assert_eq!(result.fmt_commands, vec!["base_fmt"]);
+        assert_eq!(result.build_commands, vec!["base_build"]);
     }
 
     #[test]
@@ -319,6 +330,7 @@ mod tests {
             post_end_commands: vec![],
             test_commands: vec![],
             fmt_commands: vec![],
+            build_commands: vec![],
         };
         let other = RepoConfig {
             pre_start_commands: vec!["other_pre_start".to_string()],
@@ -327,6 +339,7 @@ mod tests {
             post_end_commands: vec!["other_post_end".to_string()],
             test_commands: vec!["other_test".to_string()],
             fmt_commands: vec!["other_fmt".to_string()],
+            build_commands: vec!["other_build".to_string()],
         };
 
         let result = base.merge_with(other);
@@ -337,6 +350,7 @@ mod tests {
         assert_eq!(result.post_end_commands, vec!["other_post_end"]);
         assert_eq!(result.test_commands, vec!["other_test"]);
         assert_eq!(result.fmt_commands, vec!["other_fmt"]);
+        assert_eq!(result.build_commands, vec!["other_build"]);
     }
 
     #[test]
@@ -348,6 +362,7 @@ mod tests {
             post_end_commands: vec!["base_post_end".to_string()],
             test_commands: vec!["base_test".to_string()],
             fmt_commands: vec!["base_fmt".to_string()],
+            build_commands: vec!["base_build".to_string()],
         };
         let other = RepoConfig {
             pre_start_commands: vec!["other_pre_start".to_string()],
@@ -356,6 +371,7 @@ mod tests {
             post_end_commands: vec!["other_post_end".to_string()],
             test_commands: vec!["other_test".to_string()],
             fmt_commands: vec!["other_fmt".to_string()],
+            build_commands: vec!["other_build".to_string()],
         };
 
         let result = base.merge_with(other);
@@ -366,6 +382,7 @@ mod tests {
         assert_eq!(result.post_end_commands, vec!["other_post_end"]);
         assert_eq!(result.test_commands, vec!["other_test"]);
         assert_eq!(result.fmt_commands, vec!["other_fmt"]);
+        assert_eq!(result.build_commands, vec!["other_build"]);
     }
 
     #[test]
@@ -377,6 +394,7 @@ mod tests {
             post_end_commands: vec!["base_post_end".to_string()],
             test_commands: vec!["base_test".to_string()],
             fmt_commands: vec!["base_fmt".to_string()],
+            build_commands: vec!["base_build".to_string()],
         };
         let other = RepoConfig {
             pre_start_commands: vec![], // Empty, should not override
@@ -385,6 +403,7 @@ mod tests {
             post_end_commands: vec![],  // Empty, should not override
             test_commands: vec!["other_test1".to_string(), "other_test2".to_string()], // Should override
             fmt_commands: vec![], // Empty, should not override
+            build_commands: vec!["other_build1".to_string(), "other_build2".to_string()], // Should override
         };
 
         let result = base.merge_with(other);
@@ -395,6 +414,8 @@ mod tests {
         assert_eq!(result.post_end_commands, vec!["base_post_end"]); // Kept from base
         assert_eq!(result.test_commands, vec!["other_test1", "other_test2"]); // Overridden
         assert_eq!(result.fmt_commands, vec!["base_fmt"]); // Kept from base
+        assert_eq!(result.build_commands, vec!["other_build1", "other_build2"]);
+        // Overridden
     }
 
     #[test]
@@ -406,6 +427,7 @@ mod tests {
             post_end_commands: vec![],
             test_commands: vec![],
             fmt_commands: vec![],
+            build_commands: vec![],
         };
         let other = RepoConfig {
             pre_start_commands: vec![], // Should not override
@@ -418,6 +440,7 @@ mod tests {
             post_end_commands: vec![],
             test_commands: vec!["test1".to_string()],
             fmt_commands: vec![],
+            build_commands: vec!["build1".to_string()],
         };
 
         let result = base.merge_with(other);
@@ -431,6 +454,7 @@ mod tests {
         assert!(result.post_end_commands.is_empty());
         assert_eq!(result.test_commands, vec!["test1"]); // From other
         assert!(result.fmt_commands.is_empty()); // Empty from both
+        assert_eq!(result.build_commands, vec!["build1"]); // From other
     }
 
     #[test]
@@ -442,6 +466,7 @@ mod tests {
             post_end_commands: vec![],
             test_commands: vec![],
             fmt_commands: vec![],
+            build_commands: vec![],
         };
         let middle = RepoConfig {
             pre_start_commands: vec![], // Should not override
@@ -450,6 +475,7 @@ mod tests {
             post_end_commands: vec![],
             test_commands: vec![],
             fmt_commands: vec!["middle_fmt".to_string()],
+            build_commands: vec!["middle_build".to_string()],
         };
         let final_config = RepoConfig {
             pre_start_commands: vec!["final".to_string()], // Should override
@@ -457,7 +483,8 @@ mod tests {
             pre_end_commands: vec![],
             post_end_commands: vec![],
             test_commands: vec!["final_test".to_string()],
-            fmt_commands: vec![], // Should not override
+            fmt_commands: vec![],   // Should not override
+            build_commands: vec![], // Should not override
         };
 
         let result = base.merge_with(middle).merge_with(final_config);
@@ -468,5 +495,6 @@ mod tests {
         assert!(result.post_end_commands.is_empty());
         assert_eq!(result.test_commands, vec!["final_test"]); // From final
         assert_eq!(result.fmt_commands, vec!["middle_fmt"]); // From middle (final is empty)
+        assert_eq!(result.build_commands, vec!["middle_build"]); // From middle (final is empty)
     }
 }
