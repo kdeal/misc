@@ -123,12 +123,16 @@ pub fn end_workflow() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn list_repositories(config: Config) -> anyhow::Result<()> {
+pub fn list_repositories(config: Config, full_path: bool) -> anyhow::Result<()> {
     let base_repo_path = config.repositories_directory_path()?;
     let repo_paths = get_repositories_in_directory(&base_repo_path)?;
     for repo_path in repo_paths {
-        let relative_repo_path = repo_path.strip_prefix(&base_repo_path)?;
-        println!("{}", relative_repo_path.display())
+        if full_path {
+            println!("{}", repo_path.display())
+        } else {
+            let relative_repo_path = repo_path.strip_prefix(&base_repo_path)?;
+            println!("{}", relative_repo_path.display())
+        }
     }
     Ok(())
 }

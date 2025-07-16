@@ -35,7 +35,10 @@ enum Commands {
     Start,
     End,
     RepoDebug,
-    Repos,
+    Repos {
+        #[arg(short, long)]
+        full_path: bool,
+    },
     Repo,
     Config,
     Clone,
@@ -158,7 +161,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::Start => actions::start_workflow(&mut context)?,
         Commands::End => actions::end_workflow()?,
         Commands::RepoDebug => actions::print_repo_debug_info()?,
-        Commands::Repos => actions::list_repositories(context.config)?,
+        Commands::Repos { full_path } => actions::list_repositories(context.config, full_path)?,
         Commands::Repo => actions::switch_repo(&mut context)?,
         Commands::Clone => actions::clone_repo(&mut context)?,
         Commands::PruneBranches => actions::prune_merged_branches(&context.config)?,
