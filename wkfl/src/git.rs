@@ -206,3 +206,17 @@ pub fn clone_repo(repo_url: &str, repo_path: &Path) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+pub fn get_current_commit_sha(repo: &Repository) -> anyhow::Result<String> {
+    let head = repo.head()?;
+    let commit = head.peel_to_commit()?;
+    Ok(commit.id().to_string())
+}
+
+pub fn get_default_remote_url(repo: &Repository) -> anyhow::Result<String> {
+    let remote = repo.find_remote("origin")?;
+    let url = remote
+        .url()
+        .ok_or_else(|| anyhow::anyhow!("Remote 'origin' has no URL"))?;
+    Ok(url.to_string())
+}
