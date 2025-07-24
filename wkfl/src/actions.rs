@@ -13,6 +13,7 @@ use crate::config::Config;
 use crate::config::WebChatProvider;
 use crate::git;
 use crate::git::determine_repo_root_dir;
+use crate::git::get_default_remote_url;
 use crate::llm;
 use crate::llm::anthropic;
 use crate::llm::perplexity;
@@ -203,20 +204,10 @@ pub fn clone_repo(context: &mut Context) -> anyhow::Result<()> {
 /// List all local branches and delete those whose pull request has been merged
 pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
-    let remote = repo.find_remote("origin")?;
-    let remote_url = remote
-        .url()
-        .ok_or(anyhow::anyhow!("Remote 'origin' has no URL"))?;
+    let remote_url = get_default_remote_url(&repo)?;
 
-    let (owner, repo_name) = extract_owner_repo_from_url(remote_url)?;
-    // Determine API base URL and authentication token for this host
-    let host = host_from_remote_url(remote_url)?;
-    let token_value = config
-        .github_tokens
-        .get(&host)
-        .ok_or(anyhow!("No GitHub token configured for host '{}'", host))?;
-    let token = resolve_secret(token_value)?;
-    let gh_client = GitHubClient::new(host, token);
+    let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
+    let gh_client = create_github_client(&remote_url, config)?;
 
     // Determine default branch name to avoid deleting it
     let default_branch = git::get_default_branch(&repo)?;
@@ -718,6 +709,56 @@ pub fn run_build_commands(_context: &mut Context) -> anyhow::Result<()> {
     }
 
     utils::run_commands_with_output(&repo_config.build_commands)?;
+    Ok(())
+}
+
+fn create_github_client(remote_url: &str, config: &Config) -> anyhow::Result<GitHubClient> {
+    let host = host_from_remote_url(remote_url)?;
+    let github_token = config
+        .github_tokens
+        .get(&host)
+        .ok_or_else(|| {
+            anyhow!(
+                "GitHub token not configured for host '{}'. Add it to your config file.",
+                host
+            )
+        })?
+        .clone();
+
+    Ok(GitHubClient::new(host, github_token))
+}
+
+pub fn get_pull_request_for_commit(
+    commit_sha: Option<String>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let repo = git::get_repository()?;
+
+    let sha = if let Some(sha) = commit_sha {
+        sha
+    } else {
+        git::get_current_commit_sha(&repo)?
+    };
+
+    let remote_url = git::get_default_remote_url(&repo)?;
+    let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
+
+    let github_client = create_github_client(&remote_url, config)?;
+    let pull_requests = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
+
+    if pull_requests.is_empty() {
+        println!("No pull request found for commit {}", sha);
+    } else {
+        for pr in pull_requests {
+            let status = if pr.merged_at.is_some() {
+                "merged"
+            } else {
+                "open"
+            };
+            println!("PR #{} ({}): {}", pr.number, status, pr.html_url);
+        }
+    }
+
     Ok(())
 }
 

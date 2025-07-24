@@ -89,6 +89,10 @@ enum Commands {
     },
     /// Start MCP server
     Mcp,
+    Github {
+        #[command(subcommand)]
+        command: GithubCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -103,6 +107,15 @@ enum NotesCommands {
     Person {
         #[arg(value_hint = ValueHint::Other)]
         who: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum GithubCommands {
+    #[command(name = "get_pr")]
+    GetPr {
+        #[arg(value_hint = ValueHint::Other)]
+        commit_sha: Option<String>,
     },
 }
 
@@ -246,6 +259,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             let server = mcp::McpServer::new();
             server.run()?
         }
+        Commands::Github {
+            command: github_command,
+        } => match github_command {
+            GithubCommands::GetPr { commit_sha } => {
+                actions::get_pull_request_for_commit(commit_sha, &context.config)?
+            }
+        },
     };
 
     if let Some(shell_actions_file) = cli.shell_actions_file {
