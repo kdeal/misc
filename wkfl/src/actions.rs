@@ -5,15 +5,13 @@ use std::io;
 use std::io::Write;
 use url::Url;
 
-use crate::clients::github::GitHubClient;
+use crate::clients::github::{GitHubClient, IssueComment, PrComments, ReviewComment};
 use crate::config::get_repo_config;
 use crate::config::resolve_secret;
 use crate::config::ChatProvider;
 use crate::config::Config;
 use crate::config::WebChatProvider;
 use crate::git;
-use crate::git::determine_repo_root_dir;
-use crate::git::get_default_remote_url;
 use crate::llm;
 use crate::llm::anthropic;
 use crate::llm::perplexity;
@@ -85,7 +83,7 @@ pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
         None => format!("{user}/{name}"),
     };
 
-    let repo_config = get_repo_config(determine_repo_root_dir(&repo))?;
+    let repo_config = get_repo_config(git::determine_repo_root_dir(&repo))?;
     run_commands(&repo_config.pre_start_commands)?;
 
     if git::uses_worktrees(&repo) {
@@ -106,7 +104,7 @@ pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
 
 pub fn end_workflow() -> anyhow::Result<()> {
     let repo = git::get_repository()?;
-    let repo_config = get_repo_config(determine_repo_root_dir(&repo))?;
+    let repo_config = get_repo_config(git::determine_repo_root_dir(&repo))?;
     run_commands(&repo_config.pre_end_commands)?;
     if repo.is_worktree() {
         anyhow::bail!("For worktree based repos call stop from base of repo with name of worktree");
@@ -204,7 +202,7 @@ pub fn clone_repo(context: &mut Context) -> anyhow::Result<()> {
 /// List all local branches and delete those whose pull request has been merged
 pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
-    let remote_url = get_default_remote_url(&repo)?;
+    let remote_url = git::get_default_remote_url(&repo)?;
 
     let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
     let gh_client = create_github_client(&remote_url, config)?;
@@ -672,7 +670,7 @@ pub fn run_chat(
 
 pub fn run_test_commands(_context: &mut Context) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
-    let repo_root = determine_repo_root_dir(&repo);
+    let repo_root = git::determine_repo_root_dir(&repo);
     let repo_config = get_repo_config(repo_root)?;
 
     if repo_config.test_commands.is_empty() {
@@ -686,7 +684,7 @@ pub fn run_test_commands(_context: &mut Context) -> anyhow::Result<()> {
 
 pub fn run_fmt_commands(_context: &mut Context) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
-    let repo_root = determine_repo_root_dir(&repo);
+    let repo_root = git::determine_repo_root_dir(&repo);
     let repo_config = get_repo_config(repo_root)?;
 
     if repo_config.fmt_commands.is_empty() {
@@ -700,7 +698,7 @@ pub fn run_fmt_commands(_context: &mut Context) -> anyhow::Result<()> {
 
 pub fn run_build_commands(_context: &mut Context) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
-    let repo_root = determine_repo_root_dir(&repo);
+    let repo_root = git::determine_repo_root_dir(&repo);
     let repo_config = get_repo_config(repo_root)?;
 
     if repo_config.build_commands.is_empty() {
@@ -747,7 +745,7 @@ pub fn get_pull_request_for_commit(
     let pull_requests = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
 
     if pull_requests.is_empty() {
-        println!("No pull request found for commit {}", sha);
+        println!("No pull request found for commit {sha}");
     } else {
         for pr in pull_requests {
             let status = if pr.merged_at.is_some() {
@@ -756,6 +754,212 @@ pub fn get_pull_request_for_commit(
                 "open"
             };
             println!("PR #{} ({}): {}", pr.number, status, pr.html_url);
+        }
+    }
+
+    Ok(())
+}
+
+pub fn get_pr_comments(
+    pr_number: Option<u64>,
+    filter_timeline: bool,
+    filter_bots: bool,
+    filter_diff: bool,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let repo = git::get_repository()?;
+    let remote_url = git::get_default_remote_url(&repo)?;
+    let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
+    let github_client = create_github_client(&remote_url, config)?;
+
+    let pr_num = if let Some(num) = pr_number {
+        num
+    } else {
+        // Find PR for current commit
+        let sha = git::get_current_commit_sha(&repo)?;
+        let prs = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
+
+        if prs.is_empty() {
+            anyhow::bail!("No pull request found for current commit {}", sha);
+        }
+
+        prs[0].number
+    };
+
+    let comments = github_client.get_pr_comments(&owner, &repo_name, pr_num)?;
+
+    print_comments_markdown(&comments, filter_timeline, filter_bots, filter_diff)?;
+
+    Ok(())
+}
+
+fn is_bot_user(user_login: &str, user_type: &str) -> bool {
+    user_type == "Bot" || user_login.starts_with("service") || user_login.contains("[bot]")
+}
+
+fn format_context_lines(diff_lines: &[&git::DiffLine]) -> String {
+    if diff_lines.is_empty() {
+        return String::new();
+    }
+
+    // Calculate max line number for formatting
+    let max_line = diff_lines.iter().map(|d| d.line).max().unwrap_or(0);
+
+    let width = max_line.to_string().len();
+
+    diff_lines
+        .iter()
+        .map(|diff_line| {
+            format!(
+                "{:width$} | {} {}",
+                diff_line.line,
+                diff_line.side.to_symbol(),
+                diff_line.content,
+                width = width
+            )
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+fn extract_code_context_fallback(
+    parsed_diff: Vec<git::DiffLine>,
+    start_line: Option<u32>,
+    end_line_pos: u32,
+) -> String {
+    let range_size = std::cmp::max(
+        start_line
+            .unwrap_or(end_line_pos)
+            .saturating_sub(end_line_pos),
+        4,
+    );
+    let first_line = parsed_diff.len().saturating_sub(range_size as usize);
+
+    let context_lines: Vec<&git::DiffLine> =
+        parsed_diff[first_line..parsed_diff.len()].iter().collect();
+
+    format_context_lines(&context_lines)
+}
+
+fn extract_code_context(
+    diff_hunk: &str,
+    start_line: Option<u32>,
+    start_side: &Option<String>,
+    line: Option<u32>,
+    side: &str,
+) -> anyhow::Result<String> {
+    if line.is_none() {
+        return Ok(String::new());
+    }
+
+    let end_line_pos = line.unwrap();
+    let end_line_side = side.parse::<git::DiffSide>()?;
+    let parsed_diff = git::parse_diff_hunk(diff_hunk)?;
+    let last_line = parsed_diff.iter().last().map(|d| d.line).unwrap_or(0);
+    if end_line_pos > last_line {
+        return Ok(extract_code_context_fallback(
+            parsed_diff,
+            start_line,
+            end_line_pos,
+        ));
+    }
+
+    let start_line_pos = start_line.unwrap_or(0);
+    let start_line_side = start_side
+        .as_ref()
+        .map(|s| s.parse::<git::DiffSide>())
+        .unwrap_or(Ok(git::DiffSide::Context))?;
+
+    let size = if start_line_pos == 0 {
+        4
+    } else {
+        end_line_pos - start_line_pos
+    };
+
+    let mut context_lines = Vec::with_capacity(size as usize);
+    let mut in_context = false;
+    for diff_line in parsed_diff.iter().rev() {
+        if diff_line.line == end_line_pos && diff_line.side == end_line_side {
+            in_context = true;
+        }
+        if in_context {
+            context_lines.push(diff_line);
+            if diff_line.line == start_line_pos && diff_line.side == start_line_side {
+                break;
+            }
+            if start_line_pos == 0 && context_lines.len() >= 4 {
+                break;
+            }
+        }
+    }
+
+    context_lines.reverse();
+    Ok(format_context_lines(&context_lines))
+}
+
+fn print_comments_markdown(
+    comments: &PrComments,
+    filter_timeline: bool,
+    filter_bots: bool,
+    filter_diff: bool,
+) -> anyhow::Result<()> {
+    println!("# PR Comments\n");
+
+    // Print timeline comments
+    if !filter_timeline {
+        let mut timeline_comments: Vec<&IssueComment> = comments.issue_comments.iter().collect();
+
+        if filter_bots {
+            timeline_comments.retain(|c| !is_bot_user(&c.user.login, &c.user.user_type));
+        }
+
+        if !timeline_comments.is_empty() {
+            println!("## Timeline Comments\n");
+            for comment in timeline_comments {
+                println!("### @{} - {}", comment.user.login, comment.created_at);
+                println!("{}\n", comment.body);
+                println!("---\n");
+            }
+        }
+    }
+
+    // Print diff comments
+    if !filter_diff {
+        let mut diff_comments: Vec<&ReviewComment> = comments.review_comments.iter().collect();
+
+        if filter_bots {
+            diff_comments.retain(|c| !is_bot_user(&c.user.login, &c.user.user_type));
+        }
+
+        if !diff_comments.is_empty() {
+            println!("## Review Comments\n");
+            for comment in diff_comments {
+                println!(
+                    "### @{} - {} ({}:{})",
+                    comment.user.login,
+                    comment.created_at,
+                    comment.path,
+                    comment.original_line.unwrap_or(0)
+                );
+
+                println!("\n**Code Context:**");
+                println!("```");
+                println!(
+                    "{}",
+                    extract_code_context(
+                        &comment.diff_hunk,
+                        comment.original_start_line,
+                        &comment.start_side,
+                        comment.original_line,
+                        &comment.side,
+                    )?
+                );
+                println!("```\n");
+
+                println!("**Comment:**");
+                println!("{}\n", comment.body);
+                println!("---\n");
+            }
         }
     }
 
