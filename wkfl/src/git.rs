@@ -2,6 +2,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    str::FromStr,
 };
 
 use anyhow::{self, bail};
@@ -219,4 +220,178 @@ pub fn get_default_remote_url(repo: &Repository) -> anyhow::Result<String> {
         .url()
         .ok_or_else(|| anyhow::anyhow!("Remote 'origin' has no URL"))?;
     Ok(url.to_string())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffSide {
+    Right,
+    Left,
+    Context,
+}
+
+impl DiffSide {
+    /// Returns the symbol character used in unified diff format for this side.
+    ///
+    /// - `Right` (added lines) → `'+'`
+    /// - `Left` (deleted lines) → `'-'`
+    /// - `Context` (unchanged lines) → `' '` (space)
+    pub fn to_symbol(self) -> char {
+        match self {
+            DiffSide::Right => '+',
+            DiffSide::Left => '-',
+            DiffSide::Context => ' ',
+        }
+    }
+}
+
+impl FromStr for DiffSide {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "RIGHT" => Ok(DiffSide::Right),
+            "LEFT" => Ok(DiffSide::Left),
+            "CONTEXT" => Ok(DiffSide::Context),
+            _ => anyhow::bail!(
+                "Invalid DiffSide: '{}'. Valid values are: RIGHT, LEFT, CONTEXT",
+                s
+            ),
+        }
+    }
+}
+
+/// Represents a single line in a diff hunk with its associated metadata.
+///
+/// # Line Number Handling
+/// - For `Left` and `Right` sides: `line` contains the line number, `left_line` is `None`
+/// - For `Context` lines: `line` contains the right-side line number, `left_line` contains `Some(left_line_number)`
+///
+/// This design avoids duplicating context lines while preserving both line numbers.
+#[allow(dead_code)]
+pub struct DiffLine<'a> {
+    /// Which side of the diff this line belongs to
+    pub side: DiffSide,
+    /// Line number (right-side for context lines, actual side for added/deleted lines)
+    pub line: u32,
+    /// Left-side line number for context lines, None for added/deleted lines
+    pub left_line: Option<u32>,
+    /// The actual content of the line (without the +, -, or space prefix)
+    pub content: &'a str,
+}
+
+/// Parses a unified diff hunk into structured diff lines.
+///
+/// Takes a diff hunk in unified format (starting with `@@` header) and returns
+/// a vector of `DiffLine` structs representing each line in the diff.
+///
+/// # Format
+/// The input should be in unified diff format:
+/// ```text
+/// @@ -old_start,old_count +new_start,new_count @@
+/// -deleted line
+/// +added line
+///  context line
+/// ```
+///
+/// # Returns
+/// - `Ok(Vec<DiffLine>)` - Successfully parsed diff lines
+/// - `Err(anyhow::Error)` - Invalid diff format or parsing error
+///
+/// # Errors
+/// - Empty input
+/// - Missing or malformed `@@` header
+/// - Invalid line numbers in header
+/// - Unknown line prefixes (not `+`, `-`, or ` `)
+///
+/// # Example
+/// ```rust
+/// let hunk = "@@ -1,3 +1,4 @@\n old line\n-deleted\n+added\n new line";
+/// let lines = parse_diff_hunk(hunk)?;
+/// ```
+pub fn parse_diff_hunk(diff_hunk: &str) -> anyhow::Result<Vec<DiffLine>> {
+    let mut result = Vec::new();
+    let lines: Vec<&str> = diff_hunk.lines().collect();
+
+    if lines.is_empty() {
+        bail!("Diff hunk is empty");
+    }
+
+    // Parse the @@ header to get starting line numbers
+    let header = lines[0];
+    if !header.starts_with("@@") {
+        bail!("Invalid diff hunk: missing @@ header");
+    }
+
+    // Extract line numbers from header like "@@ -0,0 +1,494 @@"
+    let parts: Vec<&str> = header.split_whitespace().collect();
+    if parts.len() < 3 {
+        bail!("Invalid diff hunk header: insufficient parts");
+    }
+
+    let left_info = parts[1].trim_start_matches('-');
+    let right_info = parts[2].trim_start_matches('+');
+
+    let left_start = left_info
+        .split(',')
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Invalid left side info in diff header"))?
+        .parse::<u32>()
+        .map_err(|_| anyhow::anyhow!("Invalid left line number in diff header"))?;
+
+    let right_start = right_info
+        .split(',')
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Invalid right side info in diff header"))?
+        .parse::<u32>()
+        .map_err(|_| anyhow::anyhow!("Invalid right line number in diff header"))?;
+
+    let mut left_line = left_start;
+    let mut right_line = right_start;
+
+    // Process each line after the header
+    for line in &lines[1..] {
+        if line.is_empty() {
+            bail!("Invalid diff line: too short");
+        }
+
+        let first_char = line.chars().next().unwrap_or(' ');
+        let content = &line[1..]; // Remove the +, -, or space prefix
+
+        match first_char {
+            '+' => {
+                result.push(DiffLine {
+                    side: DiffSide::Right,
+                    line: right_line,
+                    left_line: None,
+                    content,
+                });
+                right_line += 1;
+            }
+            '-' => {
+                result.push(DiffLine {
+                    side: DiffSide::Left,
+                    line: left_line,
+                    left_line: None,
+                    content,
+                });
+                left_line += 1;
+            }
+            ' ' => {
+                // Context line - store right line in 'line' and left line in 'left_line'
+                result.push(DiffLine {
+                    side: DiffSide::Context,
+                    line: right_line,
+                    left_line: Some(left_line),
+                    content,
+                });
+                left_line += 1;
+                right_line += 1;
+            }
+            _ => {
+                bail!("Invalid diff line: unknown prefix '{}'", first_char);
+            }
+        }
+    }
+
+    Ok(result)
 }

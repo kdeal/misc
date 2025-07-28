@@ -117,6 +117,20 @@ enum GithubCommands {
         #[arg(value_hint = ValueHint::Other)]
         commit_sha: Option<String>,
     },
+    #[command(name = "get_pr_comments")]
+    GetPrComments {
+        #[arg(value_hint = ValueHint::Other)]
+        pr_number: Option<u64>,
+        /// Filter out timeline comments (general PR comments)
+        #[arg(long)]
+        filter_timeline: bool,
+        /// Filter out bot comments (default: true)
+        #[arg(long)]
+        no_filter_bots: bool,
+        /// Filter out diff/review comments
+        #[arg(long)]
+        filter_diff: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -265,6 +279,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             GithubCommands::GetPr { commit_sha } => {
                 actions::get_pull_request_for_commit(commit_sha, &context.config)?
             }
+            GithubCommands::GetPrComments {
+                pr_number,
+                filter_timeline,
+                no_filter_bots,
+                filter_diff,
+            } => actions::get_pr_comments(
+                pr_number,
+                filter_timeline,
+                !no_filter_bots,
+                filter_diff,
+                &context.config,
+            )?,
         },
     };
 
