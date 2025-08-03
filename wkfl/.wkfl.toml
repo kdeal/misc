@@ -1,0 +1,25 @@
+# Build commands for the wkfl project
+build_commands = [
+    "cargo build",
+]
+
+# Test commands for the wkfl project
+test_commands = [
+    "cargo test",
+    "cargo clippy --fix --allow-dirty --allow-staged",
+]
+
+# Fmt commands for the wkfl project (auto-fix issues)
+fmt_commands = [
+    "cargo fmt",
+]
+
+# Commands to run after starting work (when branch is created)
+post_start_commands = [
+    "cargo check"
+]
+
+# Commands to run before ending work
+pre_end_commands = [
+    "cargo test",
+]
