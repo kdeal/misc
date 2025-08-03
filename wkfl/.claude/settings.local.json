@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(cargo test)",
+      "Bash(cargo fmt:*)"
+    ],
+    "deny": []
+  }
+}
