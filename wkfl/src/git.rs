@@ -149,7 +149,7 @@ pub fn on_default_branch(repo: &Repository) -> anyhow::Result<bool> {
     Ok(current_branch.name()?.unwrap_or("") == default_branch)
 }
 
-fn get_current_branch(repo: &Repository) -> anyhow::Result<Branch> {
+fn get_current_branch(repo: &Repository) -> anyhow::Result<Branch<'_>> {
     if repo.head_detached().unwrap_or(false) {
         bail!("Currently no branch, repo head is detached");
     }
@@ -308,7 +308,7 @@ pub struct DiffLine<'a> {
 /// let hunk = "@@ -1,3 +1,4 @@\n old line\n-deleted\n+added\n new line";
 /// let lines = parse_diff_hunk(hunk)?;
 /// ```
-pub fn parse_diff_hunk(diff_hunk: &str) -> anyhow::Result<Vec<DiffLine>> {
+pub fn parse_diff_hunk(diff_hunk: &str) -> anyhow::Result<Vec<DiffLine<'_>>> {
     let mut result = Vec::new();
     let lines: Vec<&str> = diff_hunk.lines().collect();
 
