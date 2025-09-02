@@ -1,16 +1,15 @@
 {
   "permissions": {
     "defaultMode": "acceptEdits",
-   "permissions": {
-     "defaultMode": "acceptEdits",
-     "allow": [
-       "Bash(cargo check:*)",
-       "Bash(cargo test:*)",
-       "Bash(cargo fmt:*)",
-       "Bash(cargo clippy:*)",
-       "Bash(cargo build:*)"
-     ],
-     "deny": []
-   }
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo build:*)"
+    ],
+    "ask": [
+      "EditFile(Cargo.toml:*)"
+    ]
   }
 }
