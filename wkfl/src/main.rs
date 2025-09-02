@@ -16,6 +16,7 @@ mod notes;
 mod prompts;
 mod repositories;
 mod shell_actions;
+mod todo;
 mod utils;
 
 #[derive(Parser, Debug)]
@@ -93,6 +94,10 @@ enum Commands {
         #[command(subcommand)]
         command: GithubCommands,
     },
+    Todo {
+        #[command(subcommand)]
+        command: TodoCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -130,6 +135,54 @@ enum GithubCommands {
         /// Filter out diff/review comments
         #[arg(long)]
         filter_diff: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum TodoCommands {
+    List {
+        #[arg(short, long, help = "Show only pending (unchecked) items")]
+        pending: bool,
+        #[arg(short, long, help = "Show only completed (checked) items")]
+        completed: bool,
+        #[arg(short = 'n', long, help = "Show only the count of items")]
+        count: bool,
+    },
+    Add {
+        #[arg(value_hint = ValueHint::Other)]
+        description: String,
+        #[arg(
+            short,
+            long,
+            conflicts_with = "after",
+            help = "Add item at the top of the list"
+        )]
+        top: bool,
+        #[arg(
+            short,
+            long,
+            conflicts_with = "top",
+            help = "Add item after the specified 1-based index"
+        )]
+        after: Option<usize>,
+        #[arg(
+            short,
+            long,
+            help = "Nest item under the previous item (increases indentation)"
+        )]
+        nest: bool,
+    },
+    Remove {
+        #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to remove")]
+        index: usize,
+    },
+    Check {
+        #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to mark as completed")]
+        index: usize,
+    },
+    Uncheck {
+        #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to mark as pending")]
+        index: usize,
     },
 }
 
@@ -291,6 +344,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                 filter_diff,
                 &context.config,
             )?,
+        },
+        Commands::Todo {
+            command: todo_command,
+        } => match todo_command {
+            TodoCommands::List {
+                pending,
+                completed,
+                count,
+            } => todo::list_todos(&context.config, pending, completed, count)?,
+            TodoCommands::Add {
+                description,
+                top,
+                after,
+                nest,
+            } => todo::add_todo(&context.config, description.clone(), top, after, nest)?,
+            TodoCommands::Remove { index } => todo::remove_todo(&context.config, index)?,
+            TodoCommands::Check { index } => todo::check_todo(&context.config, index)?,
+            TodoCommands::Uncheck { index } => todo::uncheck_todo(&context.config, index)?,
         },
     };
 
