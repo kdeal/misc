@@ -1,3 +1,5 @@
+use crate::config::Config;
+use crate::git::host_from_remote_url;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use ureq;
@@ -193,4 +195,20 @@ impl GitHubClient {
             .with_context(|| "Failed to parse GitHub review comments response as JSON")?;
         Ok(comments)
     }
+}
+
+pub fn create_github_client(remote_url: &str, config: &Config) -> anyhow::Result<GitHubClient> {
+    let host = host_from_remote_url(remote_url)?;
+    let github_token = config.github_tokens.get(&host).ok_or_else(|| {
+        anyhow!(
+            "GitHub token not configured for host '{}'. Add it to your config file.",
+            host
+        )
+    })?;
+
+    Ok(GitHubClient::new(host, github_token.clone()))
+}
+
+pub fn is_bot_user(user_login: &str, user_type: &str) -> bool {
+    user_type == "Bot" || user_login.starts_with("service") || user_login.ends_with("[bot]")
 }

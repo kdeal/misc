@@ -1,4 +1,8 @@
-use crate::config::get_repo_config;
+use crate::clients::github::create_github_client;
+use crate::clients::github::PrComments;
+use crate::config::{get_config, get_repo_config, Config};
+use crate::git;
+use crate::git::extract_owner_repo_from_url;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -336,6 +340,64 @@ impl McpServer {
                     required: None,
                 }),
             },
+            Tool {
+                name: "get_pr_comments".to_string(),
+                title: Some("Get PR Comments".to_string()),
+                description: Some(
+                    "Get comments from a GitHub pull request in structured JSON format".to_string(),
+                ),
+                input_schema: ToolInputSchema {
+                    schema_type: "object".to_string(),
+                    properties: Some({
+                        let mut props = HashMap::new();
+                        props.insert(
+                            "repo_path".to_string(),
+                            json!({
+                                "type": "string",
+                                "description": "Path to the repository root directory"
+                            }),
+                        );
+                        props.insert(
+                            "pr_number".to_string(),
+                            json!({
+                                "type": "integer",
+                                "description": "PR number (optional, will auto-detect from current commit if not provided)"
+                            }),
+                        );
+                        props
+                    }),
+                    required: Some(vec!["repo_path".to_string()]),
+                },
+                output_schema: Some(ToolOutputSchema {
+                    schema_type: "object".to_string(),
+                    properties: Some({
+                        let mut props = HashMap::new();
+                        props.insert(
+                            "issue_comments".to_string(),
+                            json!({
+                                "type": "array",
+                                "description": "Timeline comments on the PR"
+                            }),
+                        );
+                        props.insert(
+                            "review_comments".to_string(),
+                            json!({
+                                "type": "array",
+                                "description": "Review comments on specific lines of code"
+                            }),
+                        );
+                        props.insert(
+                            "error".to_string(),
+                            json!({
+                                "type": "string",
+                                "description": "Error message if retrieval failed"
+                            }),
+                        );
+                        props
+                    }),
+                    required: None,
+                }),
+            },
         ];
 
         Self {
@@ -451,6 +513,7 @@ impl McpServer {
             "get_test_commands" => self.get_test_commands(arguments),
             "get_fmt_commands" => self.get_fmt_commands(arguments),
             "get_build_commands" => self.get_build_commands(arguments),
+            "get_pr_comments" => self.get_pr_comments(arguments),
             _ => CallToolResult {
                 content: vec![TextContent {
                     content_type: "text".to_string(),
@@ -560,5 +623,114 @@ impl McpServer {
 
     fn get_build_commands(&self, args: &Value) -> CallToolResult {
         self.get_commands_from_config(args, "build", |config| config.build_commands.clone())
+    }
+
+    fn get_pr_comments(&self, args: &Value) -> CallToolResult {
+        let repo_path = match Self::extract_repo_path(args) {
+            Ok(path) => path,
+            Err(error_result) => return error_result,
+        };
+
+        // Extract parameters
+        let pr_number = args["pr_number"].as_u64();
+
+        // Create config from repo path - we need this for GitHub tokens
+        let config = match get_config() {
+            Ok(config) => config,
+            Err(e) => return Self::create_error_result(&format!("Failed to load config: {e}")),
+        };
+
+        match self.get_pr_comments_impl(&repo_path, pr_number, &config) {
+            Ok(comments) => Self::create_pr_comments_result(comments),
+            Err(e) => Self::create_error_result(&format!("Failed to get PR comments: {e}")),
+        }
+    }
+
+    fn get_pr_comments_impl(
+        &self,
+        repo_path: &PathBuf,
+        pr_number: Option<u64>,
+        config: &Config,
+    ) -> anyhow::Result<PrComments> {
+        // Set current directory to repo path
+        std::env::set_current_dir(repo_path)?;
+
+        let repo = git::get_repository()?;
+        let remote_url = git::get_default_remote_url(&repo)?;
+        let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
+        let github_client = create_github_client(&remote_url, config)?;
+
+        let pr_num = if let Some(num) = pr_number {
+            num
+        } else {
+            // Find PR for current commit
+            let sha = git::get_current_commit_sha(&repo)?;
+            let prs = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
+
+            if prs.is_empty() {
+                anyhow::bail!("No pull request found for current commit {}", sha);
+            }
+
+            prs[0].number
+        };
+
+        github_client.get_pr_comments(&owner, &repo_name, pr_num)
+    }
+
+    fn create_pr_comments_result(comments: PrComments) -> CallToolResult {
+        let issue_comments_json: Vec<Value> = comments
+            .issue_comments
+            .iter()
+            .map(|c| {
+                json!({
+                    "id": c.id,
+                    "user": {
+                        "login": c.user.login,
+                        "user_type": c.user.user_type
+                    },
+                    "body": c.body,
+                    "created_at": c.created_at,
+                    "updated_at": c.updated_at
+                })
+            })
+            .collect();
+
+        let review_comments_json: Vec<Value> = comments
+            .review_comments
+            .iter()
+            .map(|c| {
+                json!({
+                    "id": c.id,
+                    "user": {
+                        "login": c.user.login,
+                        "user_type": c.user.user_type
+                    },
+                    "body": c.body,
+                    "path": c.path,
+                    "line": c.line,
+                    "original_line": c.original_line,
+                    "side": c.side,
+                    "start_side": c.start_side,
+                    "diff_hunk": c.diff_hunk,
+                    "created_at": c.created_at,
+                    "updated_at": c.updated_at
+                })
+            })
+            .collect();
+
+        let total_comments = issue_comments_json.len() + review_comments_json.len();
+        let message = format!("Retrieved {total_comments} PR comments successfully");
+
+        CallToolResult {
+            content: vec![TextContent {
+                content_type: "text".to_string(),
+                text: message,
+            }],
+            is_error: Some(false),
+            structured_content: Some(json!({
+                "issue_comments": issue_comments_json,
+                "review_comments": review_comments_json
+            })),
+        }
     }
 }

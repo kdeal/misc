@@ -3,15 +3,16 @@ use log::info;
 use std::fs;
 use std::io;
 use std::io::Write;
-use url::Url;
 
-use crate::clients::github::{GitHubClient, IssueComment, PrComments, ReviewComment};
+use crate::clients::github::{
+    create_github_client, is_bot_user, IssueComment, PrComments, ReviewComment,
+};
 use crate::config::get_repo_config;
 use crate::config::resolve_secret;
 use crate::config::ChatProvider;
 use crate::config::Config;
 use crate::config::WebChatProvider;
-use crate::git;
+use crate::git::{self, extract_owner_repo_from_url, extract_repo_from_url};
 use crate::llm;
 use crate::llm::anthropic;
 use crate::llm::perplexity;
@@ -30,42 +31,6 @@ use crate::shell_actions::ShellAction;
 use crate::utils;
 use crate::utils::run_commands;
 use crate::Context;
-
-/// Determine the host name from a remote URL.
-fn host_from_remote_url(remote_url: &str) -> anyhow::Result<String> {
-    let host = if remote_url.starts_with("git@") {
-        remote_url
-            .split_once('@')
-            .unwrap()
-            .1
-            .split_once(':')
-            .unwrap()
-            .0
-            .to_string()
-    } else {
-        let parsed = Url::parse(remote_url)?;
-        parsed
-            .host_str()
-            .ok_or(anyhow::anyhow!(
-                "Failed to parse host from '{}'",
-                remote_url
-            ))?
-            .to_string()
-    };
-
-    Ok(host)
-}
-
-/// Parse owner and repository name from a remote URL
-fn extract_owner_repo_from_url(remote_url: &str) -> anyhow::Result<(String, String)> {
-    let owner_repo = extract_repo_from_url(remote_url)?;
-    let parts = owner_repo.split_once('/');
-    let (owner, repo) = parts.ok_or(anyhow::anyhow!(
-        "Unable to parse owner and repo from '{}'",
-        owner_repo
-    ))?;
-    Ok((owner.to_string(), repo.to_string()))
-}
 
 pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
@@ -154,31 +119,6 @@ pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
         .shell_actions
         .push(ShellAction::Cd { path: repo_path });
     Ok(())
-}
-
-fn extract_repo_from_url(repo_url_str: &str) -> anyhow::Result<String> {
-    // This isn't perfect, but should be good enough for me and doesn't
-    // require writing a regex
-    if repo_url_str.starts_with("git@") {
-        let (_, repo) = repo_url_str.split_once(':').ok_or(anyhow::anyhow!(
-            "Repo url that start with git@ must be in the form 'git@<host>:<repo>'"
-        ))?;
-        return Ok(repo.strip_suffix(".git").unwrap_or(repo).to_string());
-    }
-
-    let repo_url = Url::parse(repo_url_str)?;
-    let repo = repo_url.path();
-    if repo.starts_with('/') {
-        let repo_no_prefix = repo
-            .strip_prefix('/')
-            .expect("Checked that it starts with '/'");
-        Ok(repo_no_prefix
-            .strip_suffix(".git")
-            .unwrap_or(repo_no_prefix)
-            .to_string())
-    } else {
-        Ok(repo.strip_suffix(".git").unwrap_or(repo).to_string())
-    }
 }
 
 pub fn clone_repo(context: &mut Context) -> anyhow::Result<()> {
@@ -710,22 +650,6 @@ pub fn run_build_commands(_context: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn create_github_client(remote_url: &str, config: &Config) -> anyhow::Result<GitHubClient> {
-    let host = host_from_remote_url(remote_url)?;
-    let github_token = config
-        .github_tokens
-        .get(&host)
-        .ok_or_else(|| {
-            anyhow!(
-                "GitHub token not configured for host '{}'. Add it to your config file.",
-                host
-            )
-        })?
-        .clone();
-
-    Ok(GitHubClient::new(host, github_token))
-}
-
 pub fn get_pull_request_for_commit(
     commit_sha: Option<String>,
     config: &Config,
@@ -791,10 +715,6 @@ pub fn get_pr_comments(
     print_comments_markdown(&comments, filter_timeline, filter_bots, filter_diff)?;
 
     Ok(())
-}
-
-fn is_bot_user(user_login: &str, user_type: &str) -> bool {
-    user_type == "Bot" || user_login.starts_with("service") || user_login.contains("[bot]")
 }
 
 fn format_context_lines(diff_lines: &[&git::DiffLine]) -> String {
@@ -970,7 +890,7 @@ fn print_comments_markdown(
 mod tests {
     use super::extract_owner_repo_from_url;
     use super::extract_repo_from_url;
-    use super::host_from_remote_url;
+    use crate::git::host_from_remote_url;
 
     #[test]
     fn test_host_from_remote_url_github_com() {

@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{self, bail};
+use url::Url;
 
 use git2::{
     build::CheckoutBuilder, Branch, BranchType, Error, ErrorCode, Repository, RepositoryState,
@@ -394,4 +395,91 @@ pub fn parse_diff_hunk(diff_hunk: &str) -> anyhow::Result<Vec<DiffLine<'_>>> {
     }
 
     Ok(result)
+}
+
+pub fn extract_repo_from_url(repo_url_str: &str) -> anyhow::Result<String> {
+    let repo_path = if repo_url_str.starts_with("git@") {
+        // Handle SSH URLs: git@github.com:owner/repo.git
+        let (_, path) = repo_url_str.split_once(':').ok_or_else(|| {
+            anyhow::anyhow!(
+                "Invalid SSH URL format: expected 'git@<host>:<path>' but got '{}'",
+                repo_url_str
+            )
+        })?;
+        path.to_string()
+    } else {
+        // Handle HTTPS URLs: https://github.com/owner/repo.git
+        let repo_url = Url::parse(repo_url_str)
+            .map_err(|e| anyhow::anyhow!("Failed to parse URL '{}': {}", repo_url_str, e))?;
+
+        let path = repo_url.path();
+        if path.is_empty() || path == "/" {
+            return Err(anyhow::anyhow!(
+                "URL '{}' does not contain a repository path",
+                repo_url_str
+            ));
+        }
+
+        // Remove leading slash from path
+        path.strip_prefix('/').unwrap_or(path).to_string()
+    };
+
+    // Remove .git suffix if present and ensure non-empty result
+    let cleaned_path = repo_path.strip_suffix(".git").unwrap_or(&repo_path);
+    if cleaned_path.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Invalid repository path extracted from '{}'",
+            repo_url_str
+        ));
+    }
+
+    Ok(cleaned_path.to_string())
+}
+
+/// Parse owner and repository name from a remote URL
+pub fn extract_owner_repo_from_url(remote_url: &str) -> anyhow::Result<(String, String)> {
+    let owner_repo = extract_repo_from_url(remote_url)?;
+    let parts = owner_repo.split_once('/');
+    let (owner, repo) = parts.ok_or(anyhow::anyhow!(
+        "Unable to parse owner and repo from '{}'",
+        owner_repo
+    ))?;
+    Ok((owner.to_string(), repo.to_string()))
+}
+
+/// Determine the host name from a remote URL.
+pub fn host_from_remote_url(remote_url: &str) -> anyhow::Result<String> {
+    let host = if remote_url.starts_with("git@") {
+        let after_at = remote_url
+            .split_once('@')
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Invalid git SSH URL format: missing '@' in '{}'",
+                    remote_url
+                )
+            })?
+            .1;
+
+        after_at
+            .split_once(':')
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Invalid git SSH URL format: missing ':' after host in '{}'",
+                    remote_url
+                )
+            })?
+            .0
+            .to_string()
+    } else {
+        let parsed = Url::parse(remote_url)?;
+        parsed
+            .host_str()
+            .ok_or(anyhow::anyhow!(
+                "Failed to parse host from '{}'",
+                remote_url
+            ))?
+            .to_string()
+    };
+
+    Ok(host)
 }
