@@ -1,11 +1,16 @@
 {
   "permissions": {
     "defaultMode": "acceptEdits",
-    "allow": [
-      "Bash(cargo check:*)",
-      "Bash(cargo test)",
-      "Bash(cargo fmt:*)"
-    ],
-    "deny": []
+   "permissions": {
+     "defaultMode": "acceptEdits",
+     "allow": [
+       "Bash(cargo check:*)",
+       "Bash(cargo test:*)",
+       "Bash(cargo fmt:*)",
+       "Bash(cargo clippy:*)",
+       "Bash(cargo build:*)"
+     ],
+     "deny": []
+   }
   }
 }
