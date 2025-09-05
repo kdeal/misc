@@ -1,3 +1,4 @@
+use crate::config::resolve_secret;
 use crate::config::Config;
 use crate::git::host_from_remote_url;
 use anyhow::{anyhow, Context, Result};
@@ -199,14 +200,16 @@ impl GitHubClient {
 
 pub fn create_github_client(remote_url: &str, config: &Config) -> anyhow::Result<GitHubClient> {
     let host = host_from_remote_url(remote_url)?;
-    let github_token = config.github_tokens.get(&host).ok_or_else(|| {
+    let github_token_raw = config.github_tokens.get(&host).ok_or_else(|| {
         anyhow!(
             "GitHub token not configured for host '{}'. Add it to your config file.",
             host
         )
     })?;
+    let github_token = resolve_secret(github_token_raw)
+        .with_context(|| format!("Failed to resolve GitHub token for host '{host}'"))?;
 
-    Ok(GitHubClient::new(host, github_token.clone()))
+    Ok(GitHubClient::new(host, github_token))
 }
 
 pub fn is_bot_user(user_login: &str, user_type: &str) -> bool {
