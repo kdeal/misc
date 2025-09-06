@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Result};
+use std::fmt::Display;
 use std::fs;
 use std::path::PathBuf;
 
 use crate::config::Config;
+use crate::prompts::select_prompt;
 
 const SPACES_PER_INDENT: usize = 4;
 
@@ -12,6 +14,42 @@ pub struct TodoItem {
     pub completed: bool,
     pub description: String,
     pub indentation_level: usize, // 0 = root, 1 = 4 spaces, 2 = 8 spaces, etc.
+}
+
+impl TodoItem {
+    fn indentation(&self) -> String {
+        " ".repeat(self.indentation_level * SPACES_PER_INDENT)
+    }
+
+    fn checkbox(&self) -> &str {
+        if self.completed {
+            "x"
+        } else {
+            " "
+        }
+    }
+
+    fn to_output_format(&self) -> String {
+        format!(
+            "{}- [{}] {}",
+            self.indentation(),
+            self.checkbox(),
+            self.description
+        )
+    }
+}
+
+impl Display for TodoItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}. [{}] {}",
+            self.indentation(),
+            self.index,
+            self.checkbox(),
+            self.description
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -89,7 +127,7 @@ impl TodoFile {
                 let indentation_level = indentation_str.len().div_ceil(4);
 
                 items.push(TodoItem {
-                    index: items.len(),
+                    index: items.len() + 1,
                     completed,
                     description,
                     indentation_level,
@@ -103,11 +141,6 @@ impl TodoFile {
             }
         }
 
-        // Re-index items to be sequential
-        for (i, item) in items.iter_mut().enumerate() {
-            item.index = i;
-        }
-
         Ok(TodoFile { items, file_path })
     }
 
@@ -117,18 +150,15 @@ impl TodoFile {
         // Add todo heading and items
         content.push_str("# Todo List\n");
 
-        if self.items.is_empty() {
-            content.push('\n');
-        } else {
-            for item in &self.items {
-                let checkbox = if item.completed { "x" } else { " " };
-                let indentation = " ".repeat(item.indentation_level * SPACES_PER_INDENT);
-                content.push_str(&format!(
-                    "{}{}[{}] {}\n",
-                    indentation, "- ", checkbox, item.description
-                ));
-            }
-        }
+        content.push_str(
+            &self
+                .items
+                .iter()
+                .map(|i| i.to_output_format())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        content.push('\n');
 
         // Atomic write: write to temporary file, then rename
         let temp_path = self.file_path.with_extension("tmp");
@@ -180,7 +210,7 @@ impl TodoFile {
 
         // Re-index all items
         for (i, item) in self.items.iter_mut().enumerate() {
-            item.index = i;
+            item.index = i + 1;
         }
 
         Ok(())
@@ -193,7 +223,7 @@ impl TodoFile {
 
         // Re-index all items
         for (i, item) in self.items.iter_mut().enumerate() {
-            item.index = i;
+            item.index = i + 1;
         }
 
         Ok(removed_item)
@@ -258,13 +288,7 @@ pub fn list_todos(config: &Config, pending: bool, completed: bool, count_only: b
     println!("Todo List ({}):", filter_desc);
 
     for item in filtered_items {
-        let checkbox = if item.completed { "x" } else { " " };
-        let user_index = item.index + 1; // Convert to 1-based for display
-        let indentation = " ".repeat(item.indentation_level * SPACES_PER_INDENT);
-        println!(
-            "  {}{}. [{}] {}",
-            indentation, user_index, checkbox, item.description
-        );
+        println!("{}", item);
     }
 
     Ok(())
@@ -287,37 +311,76 @@ pub fn add_todo(
     Ok(())
 }
 
-pub fn remove_todo(config: &Config, user_index: usize) -> Result<()> {
+fn select_todo_item(items: &[&TodoItem], action: &str) -> Result<usize> {
+    if items.is_empty() {
+        return Err(anyhow!("No todo items found."));
+    }
+
+    let options: Vec<String> = items.iter().map(|item| item.to_string()).collect();
+
+    let prompt = format!("Select todo item to {}:", action);
+    let selected = select_prompt(&prompt, &options)?;
+
+    // Extract the user index from the selected option
+    let parts: Vec<&str> = selected.trim().split('.').collect();
+    if parts.len() < 2 {
+        return Err(anyhow!("Failed to parse selected todo item"));
+    }
+
+    let user_index_str = parts[0].trim();
+    let user_index = user_index_str
+        .parse::<usize>()
+        .map_err(|_| anyhow!("Failed to parse todo item index"))?;
+
+    Ok(user_index)
+}
+
+pub fn remove_todo(config: &Config, user_index: Option<usize>) -> Result<()> {
     let notes_directory = config.notes_directory_path()?;
     let mut todo_file = TodoFile::load(notes_directory)?;
 
-    let removed_item = todo_file.remove_item(user_index)?;
+    let index = match user_index {
+        Some(idx) => idx,
+        None => select_todo_item(&todo_file.items.iter().collect::<Vec<_>>(), "remove")?,
+    };
+
+    let removed_item = todo_file.remove_item(index)?;
     todo_file.save()?;
 
     println!("Removed todo item: {}", removed_item.description);
     Ok(())
 }
 
-pub fn check_todo(config: &Config, user_index: usize) -> Result<()> {
+pub fn check_todo(config: &Config, user_index: Option<usize>) -> Result<()> {
     let notes_directory = config.notes_directory_path()?;
     let mut todo_file = TodoFile::load(notes_directory)?;
 
-    todo_file.set_item_completion(user_index, true)?;
+    let index = match user_index {
+        Some(idx) => idx,
+        None => select_todo_item(&todo_file.get_filtered_items(true, false), "check")?,
+    };
+
+    todo_file.set_item_completion(index, true)?;
     todo_file.save()?;
 
-    let item_description = todo_file.items[user_index - 1].description.clone();
+    let item_description = todo_file.items[index - 1].description.clone();
     println!("Marked as completed: {}", item_description);
     Ok(())
 }
 
-pub fn uncheck_todo(config: &Config, user_index: usize) -> Result<()> {
+pub fn uncheck_todo(config: &Config, user_index: Option<usize>) -> Result<()> {
     let notes_directory = config.notes_directory_path()?;
     let mut todo_file = TodoFile::load(notes_directory)?;
 
-    todo_file.set_item_completion(user_index, false)?;
+    let index = match user_index {
+        Some(idx) => idx,
+        None => select_todo_item(&todo_file.get_filtered_items(false, true), "uncheck")?,
+    };
+
+    todo_file.set_item_completion(index, false)?;
     todo_file.save()?;
 
-    let item_description = todo_file.items[user_index - 1].description.clone();
+    let item_description = todo_file.items[index - 1].description.clone();
     println!("Marked as pending: {}", item_description);
     Ok(())
 }
