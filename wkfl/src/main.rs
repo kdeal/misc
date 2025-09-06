@@ -174,15 +174,15 @@ enum TodoCommands {
     },
     Remove {
         #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to remove")]
-        index: usize,
+        index: Option<usize>,
     },
     Check {
         #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to mark as completed")]
-        index: usize,
+        index: Option<usize>,
     },
     Uncheck {
         #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to mark as pending")]
-        index: usize,
+        index: Option<usize>,
     },
 }
 
