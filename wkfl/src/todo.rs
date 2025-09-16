@@ -5,8 +5,11 @@ use std::path::PathBuf;
 
 use crate::config::Config;
 use crate::prompts::select_prompt;
+use crate::shell_actions::ShellAction;
+use crate::Context;
 
 const SPACES_PER_INDENT: usize = 4;
+const TODO_FILENAME: &str = "todo.md";
 
 #[derive(Debug, Clone)]
 pub struct TodoItem {
@@ -75,7 +78,7 @@ impl TodoFile {
     }
 
     pub fn load(notes_directory: PathBuf) -> Result<Self> {
-        let file_path = notes_directory.join("todo.md");
+        let file_path = notes_directory.join(TODO_FILENAME);
 
         if !file_path.exists() {
             return Ok(TodoFile {
@@ -382,5 +385,25 @@ pub fn uncheck_todo(config: &Config, user_index: Option<usize>) -> Result<()> {
 
     let item_description = todo_file.items[index - 1].description.clone();
     println!("Marked as pending: {}", item_description);
+    Ok(())
+}
+
+pub fn edit_todo(context: &mut Context) -> Result<()> {
+    let notes_directory = context.config.notes_directory_path()?;
+    let todo_file_path = notes_directory.join(TODO_FILENAME);
+
+    // Ensure the todo file exists by creating an empty one if it doesn't
+    if !todo_file_path.exists() {
+        let empty_todo_file = TodoFile {
+            items: Vec::new(),
+            file_path: todo_file_path.clone(),
+        };
+        empty_todo_file.save()?;
+    }
+
+    context.shell_actions.push(ShellAction::EditFile {
+        path: todo_file_path,
+    });
+
     Ok(())
 }

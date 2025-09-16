@@ -184,6 +184,8 @@ enum TodoCommands {
         #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to mark as pending")]
         index: Option<usize>,
     },
+    #[command(about = "Open the todo.md file in the default editor")]
+    Edit,
 }
 
 #[derive(Subcommand, Debug)]
@@ -362,6 +364,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             TodoCommands::Remove { index } => todo::remove_todo(&context.config, index)?,
             TodoCommands::Check { index } => todo::check_todo(&context.config, index)?,
             TodoCommands::Uncheck { index } => todo::uncheck_todo(&context.config, index)?,
+            TodoCommands::Edit => todo::edit_todo(&mut context)?,
         },
     };
 
