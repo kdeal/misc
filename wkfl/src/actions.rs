@@ -7,6 +7,7 @@ use std::io::Write;
 use crate::clients::github::{
     create_github_client, is_bot_user, IssueComment, PrComments, ReviewComment,
 };
+use crate::clients::jira::create_jira_client;
 use crate::config::get_repo_config;
 use crate::config::resolve_secret;
 use crate::config::ChatProvider;
@@ -881,6 +882,125 @@ fn print_comments_markdown(
                 println!("---\n");
             }
         }
+    }
+
+    Ok(())
+}
+
+fn format_jira_date(date_str: &str) -> String {
+    // Jira dates are in ISO 8601 format like "2023-12-15T10:30:45.123+0000"
+    // For simple display, just extract the date and time part
+    if let Some(t_pos) = date_str.find('T') {
+        let date_part = &date_str[..t_pos];
+        if let Some(plus_pos) = date_str.find('+') {
+            let time_part = &date_str[t_pos + 1..plus_pos];
+            // Remove milliseconds if present
+            let time_clean = if let Some(dot_pos) = time_part.find('.') {
+                &time_part[..dot_pos]
+            } else {
+                time_part
+            };
+            format!("{} {}", date_part, time_clean)
+        } else {
+            date_str.to_string()
+        }
+    } else {
+        date_str.to_string()
+    }
+}
+
+pub fn get_jira_issue(issue_key: &str, config: &Config) -> anyhow::Result<()> {
+    let client = create_jira_client(config)?;
+    let issue = client.get_issue(issue_key)?;
+
+    println!("Issue: {}", issue.key);
+    println!("Summary: {}", issue.fields.summary);
+    println!("Status: {}", issue.fields.status.name);
+    println!(
+        "Project: {} ({})",
+        issue.fields.project.name, issue.fields.project.key
+    );
+    println!("Type: {}", issue.fields.issuetype.name);
+
+    if let Some(assignee) = &issue.fields.assignee {
+        println!("Assignee: {}", assignee.display_name);
+    } else {
+        println!("Assignee: Unassigned");
+    }
+
+    if let Some(reporter) = &issue.fields.reporter {
+        println!("Reporter: {}", reporter.display_name);
+    }
+
+    if let Some(priority) = &issue.fields.priority {
+        println!("Priority: {}", priority.name);
+    }
+
+    println!("Created: {}", format_jira_date(&issue.fields.created));
+    println!("Updated: {}", format_jira_date(&issue.fields.updated));
+
+    if let Some(description) = &issue.fields.description {
+        println!("\nDescription:");
+        println!("{}", description);
+    }
+
+    if !issue.fields.comment.comments.is_empty() {
+        println!("\nComments ({}):", issue.fields.comment.comments.len());
+        for comment in &issue.fields.comment.comments {
+            println!(
+                "\n--- {} ({}) ---",
+                comment.author.display_name,
+                format_jira_date(&comment.created)
+            );
+            let comment_text = comment.body.to_plain_text();
+            if !comment_text.trim().is_empty() {
+                println!("{}", comment_text.trim());
+            } else {
+                println!("(No text content)");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn search_jira_issues(
+    jql: &str,
+    max_results: Option<u32>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let client = create_jira_client(config)?;
+    let issues = client.search_issues(jql, max_results)?;
+
+    if issues.is_empty() {
+        println!("No issues found matching the query.");
+        return Ok(());
+    }
+
+    println!("Found {} issue(s):\n", issues.len());
+    println!(
+        "{:<15} {:<50} {:<15} {:<20}",
+        "Key", "Summary", "Status", "Assignee"
+    );
+    println!("{}", "-".repeat(100));
+
+    for issue in issues {
+        let assignee = issue
+            .fields
+            .assignee
+            .map(|a| a.display_name)
+            .unwrap_or_else(|| "Unassigned".to_string());
+
+        let summary = if issue.fields.summary.len() > 47 {
+            format!("{}...", &issue.fields.summary[..47])
+        } else {
+            issue.fields.summary
+        };
+
+        println!(
+            "{:<15} {:<50} {:<15} {:<20}",
+            issue.key, summary, issue.fields.status.name, assignee
+        );
     }
 
     Ok(())

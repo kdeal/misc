@@ -98,6 +98,10 @@ enum Commands {
         #[command(subcommand)]
         command: TodoCommands,
     },
+    Jira {
+        #[command(subcommand)]
+        command: JiraCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -209,6 +213,20 @@ enum LlmCommands {
         enable_search: bool,
         #[arg(short, long)]
         stream: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum JiraCommands {
+    Get {
+        #[arg(value_hint = ValueHint::Other)]
+        issue_key: String,
+    },
+    Search {
+        #[arg(value_hint = ValueHint::Other)]
+        jql: String,
+        #[arg(short, long, help = "Maximum number of results to return")]
+        max_results: Option<u32>,
     },
 }
 
@@ -365,6 +383,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             TodoCommands::Check { index } => todo::check_todo(&context.config, index)?,
             TodoCommands::Uncheck { index } => todo::uncheck_todo(&context.config, index)?,
             TodoCommands::Edit => todo::edit_todo(&mut context)?,
+        },
+        Commands::Jira {
+            command: jira_command,
+        } => match jira_command {
+            JiraCommands::Get { issue_key } => {
+                actions::get_jira_issue(&issue_key, &context.config)?
+            }
+            JiraCommands::Search { jql, max_results } => {
+                actions::search_jira_issues(&jql, max_results, &context.config)?
+            }
         },
     };
 
