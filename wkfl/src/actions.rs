@@ -7,7 +7,7 @@ use std::io::Write;
 use crate::clients::github::{
     create_github_client, is_bot_user, IssueComment, PrComments, ReviewComment,
 };
-use crate::clients::jira::create_jira_client;
+use crate::clients::jira::{create_jira_client, format_jira_date};
 use crate::config::get_repo_config;
 use crate::config::resolve_secret;
 use crate::config::ChatProvider;
@@ -887,28 +887,6 @@ fn print_comments_markdown(
     Ok(())
 }
 
-fn format_jira_date(date_str: &str) -> String {
-    // Jira dates are in ISO 8601 format like "2023-12-15T10:30:45.123+0000"
-    // For simple display, just extract the date and time part
-    if let Some(t_pos) = date_str.find('T') {
-        let date_part = &date_str[..t_pos];
-        if let Some(plus_pos) = date_str.find('+') {
-            let time_part = &date_str[t_pos + 1..plus_pos];
-            // Remove milliseconds if present
-            let time_clean = if let Some(dot_pos) = time_part.find('.') {
-                &time_part[..dot_pos]
-            } else {
-                time_part
-            };
-            format!("{} {}", date_part, time_clean)
-        } else {
-            date_str.to_string()
-        }
-    } else {
-        date_str.to_string()
-    }
-}
-
 pub fn get_jira_issue(issue_key: &str, config: &Config) -> anyhow::Result<()> {
     let client = create_jira_client(config)?;
     let issue = client.get_issue(issue_key)?;
@@ -941,7 +919,7 @@ pub fn get_jira_issue(issue_key: &str, config: &Config) -> anyhow::Result<()> {
 
     if let Some(description) = &issue.fields.description {
         println!("\nDescription:");
-        println!("{}", description);
+        println!("{}", description.to_plain_text());
     }
 
     if !issue.fields.comment.comments.is_empty() {
@@ -991,8 +969,9 @@ pub fn search_jira_issues(
             .map(|a| a.display_name)
             .unwrap_or_else(|| "Unassigned".to_string());
 
-        let summary = if issue.fields.summary.len() > 47 {
-            format!("{}...", &issue.fields.summary[..47])
+        let summary = if issue.fields.summary.chars().count() > 50 {
+            let truncated: String = issue.fields.summary.chars().take(49).collect();
+            format!("{}…", truncated)
         } else {
             issue.fields.summary
         };
