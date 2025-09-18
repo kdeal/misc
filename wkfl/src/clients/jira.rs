@@ -234,16 +234,14 @@ impl JiraClient {
     }
 
     /// Make a GET request to the Jira API
-    #[allow(dead_code)]
     fn api_get(&self, path_segments: &[&str]) -> Result<ureq::Response> {
         self.api_get_with_query(path_segments, None)
     }
 
     /// Get a Jira issue by key
     pub fn get_issue(&self, issue_key: &str) -> Result<Issue> {
-        let query_params = [("expand", "comments")];
         let resp = self
-            .api_get_with_query(&["issue", issue_key], Some(&query_params))
+            .api_get(&["issue", issue_key])
             .with_context(|| format!("Failed to query Jira API for issue '{issue_key}'. Check that the issue key exists and you have permission to view it"))?;
 
         let issue: Issue = resp
