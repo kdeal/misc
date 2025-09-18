@@ -1311,6 +1311,7 @@ name = "wkfl"
 version = "0.1.4"
 dependencies = [
  "anyhow",
+ "base64",
  "clap",
  "clap_complete",
  "crossterm",

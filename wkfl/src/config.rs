@@ -54,6 +54,13 @@ pub struct VertexAiConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+pub struct JiraConfig {
+    pub instance_url: String,
+    pub email: String,
+    pub api_token: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
     #[serde(default = "default_repo_base_dir")]
     repositories_directory: String,
@@ -67,6 +74,8 @@ pub struct Config {
     /// GitHub API tokens mapped by host (e.g., github.com or github.example.com)
     #[serde(default)]
     pub github_tokens: HashMap<String, String>,
+    /// Jira configuration
+    pub jira: Option<JiraConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
