@@ -19,7 +19,7 @@ pub struct Issue {
 #[derive(Debug, Deserialize)]
 pub struct IssueFields {
     pub summary: String,
-    pub description: Option<String>,
+    pub description: Option<Document>,
     pub status: Status,
     pub assignee: Option<User>,
     pub reporter: Option<User>,
@@ -100,7 +100,7 @@ pub struct IssueType {
 pub struct Comment {
     #[allow(dead_code)]
     pub id: String,
-    pub body: CommentBody,
+    pub body: Document,
     pub author: User,
     pub created: String,
     #[allow(dead_code)]
@@ -109,7 +109,7 @@ pub struct Comment {
 
 /// Jira comment body (Atlassian Document Format)
 #[derive(Debug, Deserialize)]
-pub struct CommentBody {
+pub struct Document {
     #[serde(rename = "type")]
     #[allow(dead_code)]
     pub content_type: String,
@@ -118,7 +118,7 @@ pub struct CommentBody {
     pub content: Vec<serde_json::Value>,
 }
 
-impl CommentBody {
+impl Document {
     /// Extract plain text from ADF (Atlassian Document Format)
     pub fn to_plain_text(&self) -> String {
         extract_text_from_adf(&self.content)
@@ -288,4 +288,68 @@ pub fn create_jira_client(config: &Config) -> anyhow::Result<JiraClient> {
         resolve_secret(api_token_raw).with_context(|| "Failed to resolve Jira API token")?;
 
     Ok(JiraClient::new(instance_url, email, api_token))
+}
+
+pub fn format_jira_date(date_str: &str) -> String {
+    if let Some((date_part, rest)) = date_str.split_once('T') {
+        let time_no_tz = rest.split(['+', '-', 'Z']).next().unwrap_or(rest);
+        let time_clean = time_no_tz.split('.').next().unwrap_or(time_no_tz);
+        format!("{} {}", date_part, time_clean)
+    } else {
+        date_str.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_jira_date_with_timezone_plus() {
+        let input = "2023-10-15T14:30:25.123+0200";
+        let expected = "2023-10-15 14:30:25";
+        assert_eq!(format_jira_date(input), expected);
+    }
+
+    #[test]
+    fn test_format_jira_date_with_timezone_minus() {
+        let input = "2023-10-15T14:30:25.456-0500";
+        let expected = "2023-10-15 14:30:25";
+        assert_eq!(format_jira_date(input), expected);
+    }
+
+    #[test]
+    fn test_format_jira_date_with_z_timezone() {
+        let input = "2023-10-15T14:30:25.789Z";
+        let expected = "2023-10-15 14:30:25";
+        assert_eq!(format_jira_date(input), expected);
+    }
+
+    #[test]
+    fn test_format_jira_date_without_milliseconds() {
+        let input = "2023-10-15T14:30:25+0000";
+        let expected = "2023-10-15 14:30:25";
+        assert_eq!(format_jira_date(input), expected);
+    }
+
+    #[test]
+    fn test_format_jira_date_without_timezone() {
+        let input = "2023-10-15T14:30:25";
+        let expected = "2023-10-15 14:30:25";
+        assert_eq!(format_jira_date(input), expected);
+    }
+
+    #[test]
+    fn test_format_jira_date_without_t_separator() {
+        let input = "2023-10-15 14:30:25";
+        let expected = "2023-10-15 14:30:25";
+        assert_eq!(format_jira_date(input), expected);
+    }
+
+    #[test]
+    fn test_format_jira_date_simple_date() {
+        let input = "2023-10-15";
+        let expected = "2023-10-15";
+        assert_eq!(format_jira_date(input), expected);
+    }
 }
