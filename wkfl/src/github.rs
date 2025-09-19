@@ -3,7 +3,6 @@ use crate::config::Config;
 use crate::git::host_from_remote_url;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
-use ureq;
 use url::Url;
 /// A GitHub pull request minimal representation
 #[derive(Debug, Deserialize)]

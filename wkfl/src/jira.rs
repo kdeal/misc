@@ -3,7 +3,6 @@ use crate::config::Config;
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose, Engine as _};
 use serde::Deserialize;
-use ureq;
 use url::Url;
 
 /// A Jira issue minimal representation

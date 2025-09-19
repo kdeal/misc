@@ -7,9 +7,10 @@ use llm::ModelType;
 use notes::DailyNoteSpecifier;
 
 mod actions;
-mod clients;
 mod config;
 mod git;
+mod github;
+mod jira;
 mod llm;
 mod mcp;
 mod notes;
