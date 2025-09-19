@@ -1,8 +1,8 @@
-use crate::clients::github::create_github_client;
-use crate::clients::github::PrComments;
 use crate::config::{get_config, get_repo_config, Config};
 use crate::git;
 use crate::git::extract_owner_repo_from_url;
+use crate::github::create_github_client;
+use crate::github::PrComments;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;

@@ -4,16 +4,14 @@ use std::fs;
 use std::io;
 use std::io::Write;
 
-use crate::clients::github::{
-    create_github_client, is_bot_user, IssueComment, PrComments, ReviewComment,
-};
-use crate::clients::jira::{create_jira_client, format_jira_date};
 use crate::config::get_repo_config;
 use crate::config::resolve_secret;
 use crate::config::ChatProvider;
 use crate::config::Config;
 use crate::config::WebChatProvider;
 use crate::git::{self, extract_owner_repo_from_url, extract_repo_from_url};
+use crate::github::{create_github_client, is_bot_user, IssueComment, PrComments, ReviewComment};
+use crate::jira::{create_jira_client, format_jira_date};
 use crate::llm;
 use crate::llm::anthropic;
 use crate::llm::perplexity;
