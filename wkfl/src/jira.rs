@@ -5,6 +5,8 @@ use base64::{engine::general_purpose, Engine as _};
 use serde::Deserialize;
 use url::Url;
 
+pub mod adf;
+
 /// A Jira issue minimal representation
 #[derive(Debug, Deserialize)]
 pub struct Issue {
@@ -18,7 +20,7 @@ pub struct Issue {
 #[derive(Debug, Deserialize)]
 pub struct IssueFields {
     pub summary: String,
-    pub description: Option<Document>,
+    pub description: Option<adf::Document>,
     pub status: Status,
     pub assignee: Option<User>,
     pub reporter: Option<User>,
@@ -99,80 +101,11 @@ pub struct IssueType {
 pub struct Comment {
     #[allow(dead_code)]
     pub id: String,
-    pub body: Document,
+    pub body: adf::Document,
     pub author: User,
     pub created: String,
     #[allow(dead_code)]
     pub updated: String,
-}
-
-/// Jira comment body (Atlassian Document Format)
-#[derive(Debug, Deserialize)]
-pub struct Document {
-    #[serde(rename = "type")]
-    #[allow(dead_code)]
-    pub content_type: String,
-    #[allow(dead_code)]
-    pub version: u32,
-    pub content: Vec<serde_json::Value>,
-}
-
-impl Document {
-    /// Extract plain text from ADF (Atlassian Document Format)
-    pub fn to_plain_text(&self) -> String {
-        extract_text_from_adf(&self.content)
-    }
-}
-
-/// Extract text from ADF content using iterative approach to avoid stack overflow
-fn extract_text_from_adf(content: &[serde_json::Value]) -> String {
-    let mut text = String::new();
-    let mut stack = Vec::new();
-
-    // Initialize stack with root content items
-    for item in content.iter().rev() {
-        stack.push((item, false)); // (item, should_add_newline_after)
-    }
-
-    while let Some((item, add_newline)) = stack.pop() {
-        if add_newline {
-            text.push('\n');
-            continue;
-        }
-
-        if let Some(obj) = item.as_object() {
-            if let Some(item_type) = obj.get("type").and_then(|t| t.as_str()) {
-                match item_type {
-                    "text" => {
-                        if let Some(text_content) = obj.get("text").and_then(|t| t.as_str()) {
-                            text.push_str(text_content);
-                        }
-                    }
-                    "paragraph" | "blockquote" | "codeBlock" => {
-                        if let Some(child_content) = obj.get("content").and_then(|c| c.as_array()) {
-                            // Add a marker to add newline after processing children
-                            stack.push((item, true));
-                            // Add children in reverse order so they're processed in correct order
-                            for child in child_content.iter().rev() {
-                                stack.push((child, false));
-                            }
-                        }
-                    }
-                    "hardBreak" => text.push('\n'),
-                    _ => {
-                        // For other node types, just process their content if it exists
-                        if let Some(child_content) = obj.get("content").and_then(|c| c.as_array()) {
-                            for child in child_content.iter().rev() {
-                                stack.push((child, false));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    text
 }
 
 /// Client for interacting with the Jira API

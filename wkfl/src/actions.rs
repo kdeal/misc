@@ -917,7 +917,7 @@ pub fn get_jira_issue(issue_key: &str, config: &Config) -> anyhow::Result<()> {
 
     if let Some(description) = &issue.fields.description {
         println!("\nDescription:");
-        println!("{}", description.to_plain_text());
+        println!("{}", description.to_markdown());
     }
 
     if !issue.fields.comment.comments.is_empty() {
@@ -928,7 +928,7 @@ pub fn get_jira_issue(issue_key: &str, config: &Config) -> anyhow::Result<()> {
                 comment.author.display_name,
                 format_jira_date(&comment.created)
             );
-            let comment_text = comment.body.to_plain_text();
+            let comment_text = comment.body.to_markdown();
             if !comment_text.trim().is_empty() {
                 println!("{}", comment_text.trim());
             } else {
