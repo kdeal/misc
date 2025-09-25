@@ -108,6 +108,38 @@ pub struct Comment {
     pub updated: String,
 }
 
+/// A Jira filter used for saved searches
+///
+/// Filters in Jira are saved JQL queries that can be reused to search for issues.
+/// They can be marked as favourites and shared with other users.
+#[derive(Debug, Deserialize)]
+pub struct Filter {
+    /// Unique identifier for the filter
+    pub id: String,
+    /// Display name of the filter
+    pub name: String,
+    /// Optional description explaining what the filter does
+    pub description: Option<String>,
+    /// JQL query string that defines the filter criteria
+    pub jql: String,
+    /// Whether this filter is marked as a favourite by the current user
+    #[allow(dead_code)]
+    pub favourite: bool,
+    /// The user who owns/created this filter
+    #[allow(dead_code)]
+    pub owner: User,
+}
+
+impl Filter {
+    pub fn display_name(&self) -> String {
+        if let Some(desc) = &self.description {
+            format!("{} - {}", self.name, desc)
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
 /// Client for interacting with the Jira API
 pub struct JiraClient {
     api_base: String,
@@ -204,6 +236,30 @@ impl JiraClient {
 
         Ok(search_response.issues)
     }
+
+    /// Get a Jira filter by ID
+    pub fn get_filter(&self, filter_id: &str) -> Result<Filter> {
+        let resp = self
+            .api_get(&["filter", filter_id])
+            .with_context(|| format!("Failed to query Jira API for filter '{filter_id}'. Check that the filter ID exists and you have permission to view it"))?;
+
+        let filter: Filter = resp
+            .into_json()
+            .with_context(|| "Failed to parse Jira filter response as JSON")?;
+        Ok(filter)
+    }
+
+    /// Get user's favourite filters
+    pub fn get_favourite_filters(&self) -> Result<Vec<Filter>> {
+        let resp = self
+            .api_get(&["filter", "favourite"])
+            .with_context(|| "Failed to query Jira API for favourite filters. Check your authentication and permissions")?;
+
+        let filters: Vec<Filter> = resp
+            .into_json()
+            .with_context(|| "Failed to parse Jira favourite filters response as JSON")?;
+        Ok(filters)
+    }
 }
 
 pub fn create_jira_client(config: &Config) -> anyhow::Result<JiraClient> {
@@ -281,5 +337,43 @@ mod tests {
         let input = "2023-10-15";
         let expected = "2023-10-15";
         assert_eq!(format_jira_date(input), expected);
+    }
+
+    #[test]
+    fn test_format_filter_display_name_with_description() {
+        let filter = Filter {
+            id: "12345".to_string(),
+            name: "My Filter".to_string(),
+            description: Some("A great filter for finding bugs".to_string()),
+            jql: "project = TEST".to_string(),
+            favourite: true,
+            owner: User {
+                account_id: "user123".to_string(),
+                display_name: "Test User".to_string(),
+                email_address: Some("test@example.com".to_string()),
+            },
+        };
+
+        let result = filter.display_name();
+        assert_eq!(result, "My Filter - A great filter for finding bugs");
+    }
+
+    #[test]
+    fn test_format_filter_display_name_without_description() {
+        let filter = Filter {
+            id: "67890".to_string(),
+            name: "Simple Filter".to_string(),
+            description: None,
+            jql: "assignee = currentUser()".to_string(),
+            favourite: false,
+            owner: User {
+                account_id: "user456".to_string(),
+                display_name: "Other User".to_string(),
+                email_address: Some("other@example.com".to_string()),
+            },
+        };
+
+        let result = filter.display_name();
+        assert_eq!(result, "Simple Filter");
     }
 }
