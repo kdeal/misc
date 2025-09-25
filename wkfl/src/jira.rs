@@ -133,10 +133,11 @@ pub struct Filter {
 impl Filter {
     pub fn display_name(&self) -> String {
         if let Some(desc) = &self.description {
-            format!("{} - {}", self.name, desc)
-        } else {
-            self.name.clone()
+            if !desc.is_empty() {
+                return format!("{} - {}", self.name, desc);
+            }
         }
+        self.name.clone()
     }
 }
 
@@ -219,10 +220,11 @@ impl JiraClient {
         let query_params = [
             ("jql", jql),
             ("maxResults", &max_results.unwrap_or(50).to_string()),
+            ("fields", "summary,description,status,assignee,reporter,created,updated,priority,issuetype,project,comment")
         ];
 
         let resp = self
-            .api_get_with_query(&["search"], Some(&query_params))
+            .api_get_with_query(&["search", "jql"], Some(&query_params))
             .with_context(|| format!("Failed to search Jira issues with JQL: {jql}"))?;
 
         #[derive(Deserialize)]
