@@ -940,17 +940,10 @@ pub fn get_jira_issue(issue_key: &str, config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn search_jira_issues(
-    jql: &str,
-    max_results: Option<u32>,
-    config: &Config,
-) -> anyhow::Result<()> {
-    let client = create_jira_client(config)?;
-    let issues = client.search_issues(jql, max_results)?;
-
+fn display_jira_issues(issues: &[crate::jira::Issue]) {
     if issues.is_empty() {
         println!("No issues found matching the query.");
-        return Ok(());
+        return;
     }
 
     println!("Found {} issue(s):\n", issues.len());
@@ -964,14 +957,15 @@ pub fn search_jira_issues(
         let assignee = issue
             .fields
             .assignee
-            .map(|a| a.display_name)
-            .unwrap_or_else(|| "Unassigned".to_string());
+            .as_ref()
+            .map(|a| a.display_name.as_str())
+            .unwrap_or("Unassigned");
 
         let summary = if issue.fields.summary.chars().count() > 50 {
             let truncated: String = issue.fields.summary.chars().take(49).collect();
             format!("{}…", truncated)
         } else {
-            issue.fields.summary
+            issue.fields.summary.clone()
         };
 
         println!(
@@ -979,7 +973,69 @@ pub fn search_jira_issues(
             issue.key, summary, issue.fields.status.name, assignee
         );
     }
+}
 
+pub fn search_jira_issues(
+    jql: &str,
+    max_results: Option<u32>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let client = create_jira_client(config)?;
+    let issues = client.search_issues(jql, max_results)?;
+
+    display_jira_issues(&issues);
+    Ok(())
+}
+
+pub fn search_jira_issues_by_filter(
+    filter_id: Option<String>,
+    max_results: Option<u32>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let client = create_jira_client(config)?;
+
+    let filter = match filter_id {
+        Some(id) => {
+            info!("Using filter ID: {}", id);
+            // Use the provided filter ID directly
+            client.get_filter(&id)?
+        }
+        None => {
+            info!("Loading favourite filters for interactive selection");
+            // Show interactive selection of favorite filters
+            let filters = client.get_favourite_filters()?;
+
+            if filters.is_empty() {
+                println!(
+                    "No favourite filters found. You can add filters to your favourites in Jira."
+                );
+                return Ok(());
+            }
+
+            info!("Found {} favourite filters", filters.len());
+
+            let filter_options: Vec<String> = filters.iter().map(|f| f.display_name()).collect();
+
+            let selected = select_prompt("Select a filter:", &filter_options)?;
+
+            // Find the selected filter by matching the display name
+            filters
+                .into_iter()
+                .find(|f| f.display_name() == selected)
+                .ok_or_else(|| anyhow::anyhow!("Selected filter not found"))?
+        }
+    };
+
+    info!(
+        "Executing search with filter: {} (ID: {})",
+        filter.name, filter.id
+    );
+    println!("Using filter: {} ({})", filter.name, filter.jql);
+    println!();
+
+    // Search for issues using the filter's JQL
+    let issues = client.search_issues(&filter.jql, max_results)?;
+    display_jira_issues(&issues);
     Ok(())
 }
 

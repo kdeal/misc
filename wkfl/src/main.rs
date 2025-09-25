@@ -229,6 +229,12 @@ enum JiraCommands {
         #[arg(short, long, help = "Maximum number of results to return")]
         max_results: Option<u32>,
     },
+    Filter {
+        #[arg(long, help = "Filter ID to use directly")]
+        filter_id: Option<String>,
+        #[arg(short, long, help = "Maximum number of results to return")]
+        max_results: Option<u32>,
+    },
 }
 
 pub struct Context {
@@ -394,6 +400,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             JiraCommands::Search { jql, max_results } => {
                 actions::search_jira_issues(&jql, max_results, &context.config)?
             }
+            JiraCommands::Filter {
+                filter_id,
+                max_results,
+            } => actions::search_jira_issues_by_filter(filter_id, max_results, &context.config)?,
         },
     };
 
