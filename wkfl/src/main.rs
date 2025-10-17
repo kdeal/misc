@@ -47,11 +47,23 @@ enum Commands {
     /// List all local branches and delete those whose pull request has been merged
     PruneBranches,
     /// Run test commands defined in repo config
-    Test,
+    Test {
+        /// List configured commands without executing them
+        #[arg(long)]
+        list: bool,
+    },
     /// Run fmt commands defined in repo config
-    Fmt,
+    Fmt {
+        /// List configured commands without executing them
+        #[arg(long)]
+        list: bool,
+    },
     /// Run build commands defined in repo config
-    Build,
+    Build {
+        /// List configured commands without executing them
+        #[arg(long)]
+        list: bool,
+    },
     Confirm {
         #[arg(value_hint = ValueHint::Other)]
         prompt: Option<String>,
@@ -272,9 +284,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::Repo => actions::switch_repo(&mut context)?,
         Commands::Clone => actions::clone_repo(&mut context)?,
         Commands::PruneBranches => actions::prune_merged_branches(&context.config)?,
-        Commands::Test => actions::run_test_commands(&mut context)?,
-        Commands::Fmt => actions::run_fmt_commands(&mut context)?,
-        Commands::Build => actions::run_build_commands(&mut context)?,
+        Commands::Test { list } => actions::run_test_commands(&mut context, list)?,
+        Commands::Fmt { list } => actions::run_fmt_commands(&mut context, list)?,
+        Commands::Build { list } => actions::run_build_commands(&mut context, list)?,
         Commands::Config => actions::print_config(context.config),
         Commands::Confirm {
             prompt: user_prompt,
