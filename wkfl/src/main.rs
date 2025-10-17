@@ -12,7 +12,6 @@ mod git;
 mod github;
 mod jira;
 mod llm;
-mod mcp;
 mod notes;
 mod prompts;
 mod repositories;
@@ -101,8 +100,6 @@ enum Commands {
         #[arg(short, long, value_enum, default_value_t)]
         model_type: ModelType,
     },
-    /// Start MCP server
-    Mcp,
     Github {
         #[command(subcommand)]
         command: GithubCommands,
@@ -361,10 +358,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             model_type,
             model_provider,
         } => actions::run_chat(query, model_type, model_provider, context.config)?,
-        Commands::Mcp => {
-            let server = mcp::McpServer::new();
-            server.run()?
-        }
         Commands::Github {
             command: github_command,
         } => match github_command {
