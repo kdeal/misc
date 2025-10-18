@@ -23,8 +23,10 @@ mod utils;
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
+    /// Enable verbose (debug) logging output.
     #[arg(short, long)]
     verbose: bool,
+    /// Write generated shell integration commands to this file.
     #[arg(long, value_hint = ValueHint::FilePath)]
     shell_actions_file: Option<PathBuf>,
     #[command(subcommand)]
@@ -33,81 +35,109 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Start working on a new feature.
     Start,
+    /// End working on a feature.
     End,
+    /// Print diagnostic information about the current Git repository.
     RepoDebug,
+    /// List repositories in the configured repositories directory.
     Repos {
+        /// Show absolute paths instead of relative names.
         #[arg(short, long)]
         full_path: bool,
     },
+    /// Select a repository and switch to it.
     Repo,
+    /// Print the currently resolved wkfl configuration.
     Config,
+    /// Clone a repository into the repositories directory.
     Clone,
-    /// List all local branches and delete those whose pull request has been merged
+    /// List all local branches and delete those whose pull request has merged.
     PruneBranches,
-    /// Run test commands defined in repo config
+    /// Run test commands defined in the repository configuration.
     Test {
-        /// List configured commands without executing them
+        /// List configured commands without executing them.
         #[arg(long)]
         list: bool,
     },
-    /// Run fmt commands defined in repo config
+    /// Run formatting commands defined in the repository configuration.
     Fmt {
-        /// List configured commands without executing them
+        /// List configured commands without executing them.
         #[arg(long)]
         list: bool,
     },
-    /// Run build commands defined in repo config
+    /// Run build commands defined in the repository configuration.
     Build {
-        /// List configured commands without executing them
+        /// List configured commands without executing them.
         #[arg(long)]
         list: bool,
     },
+    /// Prompt for a yes/no confirmation and exit non-zero on no.
     Confirm {
+        /// Override the confirmation prompt text.
         #[arg(value_hint = ValueHint::Other)]
         prompt: Option<String>,
+        /// Treat an empty response as an affirmative answer.
         #[arg(short = 't', long)]
         default_true: bool,
     },
+    /// Prompt to select a value from newline-delimited stdin input.
     Select {
+        /// Override the selection prompt text.
         #[arg(value_hint = ValueHint::Other)]
         prompt: Option<String>,
     },
+    /// Open or create notes in the configured notes directory.
     Notes {
         #[command(subcommand)]
         command: NotesCommands,
     },
+    /// Interact with configured large language model providers.
     Llm {
         #[command(subcommand)]
         command: LlmCommands,
     },
+    /// Generate shell completion scripts for wkfl.
     Completion {
+        /// Shell to generate completions for (defaults to current shell).
         language: Option<Shell>,
     },
+    /// Send a grounded chat request using a web chat provider.
     WebChat {
+        /// Prompt to send (prompts interactively if omitted).
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        /// Override the configured web chat provider.
         #[arg(short = 'p', long, value_enum)]
         model_provider: Option<WebChatProvider>,
+        /// Model family to use for the chat request.
         #[arg(short, long, value_enum, default_value_t)]
         model_type: ModelType,
     },
+    /// Send a chat request using a configured CLI chat provider.
     Chat {
+        /// Prompt to send (prompts interactively if omitted).
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        /// Override the configured chat provider.
         #[arg(short = 'p', long, value_enum)]
         model_provider: Option<ChatProvider>,
+        /// Model family to use for the chat request.
         #[arg(short, long, value_enum, default_value_t)]
         model_type: ModelType,
     },
+    /// Query GitHub for information about the current repository.
     Github {
         #[command(subcommand)]
         command: GithubCommands,
     },
+    /// Manage the shared todo list stored with your notes.
     Todo {
         #[command(subcommand)]
         command: TodoCommands,
     },
+    /// Interact with Jira using configured credentials.
     Jira {
         #[command(subcommand)]
         command: JiraCommands,
@@ -116,14 +146,21 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum NotesCommands {
+    /// Open yesterday's daily note in your editor.
     Yesterday,
+    /// Open today's daily note in your editor.
     Today,
+    /// Open tomorrow's daily note in your editor.
     Tomorrow,
+    /// Open or create a topic note by name.
     Topic {
+        /// Name of the topic note to open (prompts if omitted).
         #[arg(value_hint = ValueHint::Other)]
         name: Option<String>,
     },
+    /// Open or create a note for a specific person.
     Person {
+        /// Person whose note to open (prompts if omitted).
         #[arg(value_hint = ValueHint::Other)]
         who: Option<String>,
     },
@@ -131,22 +168,26 @@ enum NotesCommands {
 
 #[derive(Subcommand, Debug)]
 enum GithubCommands {
+    /// List pull requests associated with a commit.
     #[command(name = "get_pr")]
     GetPr {
+        /// Commit SHA to inspect (defaults to the current HEAD).
         #[arg(value_hint = ValueHint::Other)]
         commit_sha: Option<String>,
     },
+    /// Print comments for a pull request.
     #[command(name = "get_pr_comments")]
     GetPrComments {
+        /// Pull request number to inspect (defaults to the current commit's PR).
         #[arg(value_hint = ValueHint::Other)]
         pr_number: Option<u64>,
-        /// Filter out timeline comments (general PR comments)
+        /// Exclude general timeline comments from the output.
         #[arg(long)]
         filter_timeline: bool,
-        /// Filter out bot comments (default: true)
+        /// Include bot-authored comments that are filtered by default.
         #[arg(long)]
         no_filter_bots: bool,
-        /// Filter out diff/review comments
+        /// Exclude diff review comments from the output.
         #[arg(long)]
         filter_diff: bool,
     },
@@ -154,73 +195,84 @@ enum GithubCommands {
 
 #[derive(Subcommand, Debug)]
 enum TodoCommands {
+    /// Display todo items with optional filtering.
     List {
-        #[arg(short, long, help = "Show only pending (unchecked) items")]
+        /// Show only pending (unchecked) items.
+        #[arg(short, long)]
         pending: bool,
-        #[arg(short, long, help = "Show only completed (checked) items")]
+        /// Show only completed (checked) items.
+        #[arg(short, long)]
         completed: bool,
-        #[arg(short = 'n', long, help = "Show only the count of items")]
+        /// Show only the count of items.
+        #[arg(short = 'n', long)]
         count: bool,
     },
+    /// Add a new item to the todo list.
     Add {
+        /// Text of the new todo item.
         #[arg(value_hint = ValueHint::Other)]
         description: String,
-        #[arg(
-            short,
-            long,
-            conflicts_with = "after",
-            help = "Add item at the top of the list"
-        )]
+        /// Add item at the top of the list.
+        #[arg(short, long, conflicts_with = "after")]
         top: bool,
-        #[arg(
-            short,
-            long,
-            conflicts_with = "top",
-            help = "Add item after the specified 1-based index"
-        )]
+        /// Add item after the specified 1-based index.
+        #[arg(short, long, conflicts_with = "top")]
         after: Option<usize>,
-        #[arg(
-            short,
-            long,
-            help = "Nest item under the previous item (increases indentation)"
-        )]
+        /// Nest item under the previous item (increases indentation).
+        #[arg(short, long)]
         nest: bool,
     },
+    /// Remove an item from the todo list by index.
     Remove {
-        #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to remove")]
+        /// 1-based index of the item to remove.
+        #[arg(value_hint = ValueHint::Other)]
         index: Option<usize>,
     },
+    /// Mark a todo item as completed.
     Check {
-        #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to mark as completed")]
+        /// 1-based index of the item to mark as completed.
+        #[arg(value_hint = ValueHint::Other)]
         index: Option<usize>,
     },
+    /// Mark a todo item as pending.
     Uncheck {
-        #[arg(value_hint = ValueHint::Other, help = "1-based index of the item to mark as pending")]
+        /// 1-based index of the item to mark as pending.
+        #[arg(value_hint = ValueHint::Other)]
         index: Option<usize>,
     },
-    #[command(about = "Open the todo.md file in the default editor")]
+    /// Open the todo.md file in the default editor.
     Edit,
 }
 
 #[derive(Subcommand, Debug)]
 enum LlmCommands {
+    /// Send a chat request using the Anthropic API.
     Anthropic {
+        /// Prompt to send (prompts interactively if omitted).
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        /// Stream the response instead of waiting for completion.
         #[arg(short, long)]
         stream: bool,
     },
+    /// Send a chat request using the Perplexity API.
     Perplexity {
+        /// Prompt to send (prompts interactively if omitted).
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        /// Stream the response instead of waiting for completion.
         #[arg(short, long)]
         stream: bool,
     },
+    /// Send a chat request using Google Vertex AI.
     VertexAi {
+        /// Prompt to send (prompts interactively if omitted).
         #[arg(value_hint = ValueHint::Other)]
         query: Option<String>,
+        /// Enable Google Search grounding for the request.
         #[arg(short, long)]
         enable_search: bool,
+        /// Stream the response instead of waiting for completion.
         #[arg(short, long)]
         stream: bool,
     },
@@ -228,20 +280,28 @@ enum LlmCommands {
 
 #[derive(Subcommand, Debug)]
 enum JiraCommands {
+    /// Fetch details for a Jira issue by key.
     Get {
+        /// Issue key to fetch (for example, PROJ-123).
         #[arg(value_hint = ValueHint::Other)]
         issue_key: String,
     },
+    /// Search Jira issues using a JQL query.
     Search {
+        /// JQL query string to execute.
         #[arg(value_hint = ValueHint::Other)]
         jql: String,
-        #[arg(short, long, help = "Maximum number of results to return")]
+        /// Maximum number of results to return.
+        #[arg(short, long)]
         max_results: Option<u32>,
     },
+    /// Search Jira issues using a saved filter.
     Filter {
-        #[arg(long, help = "Filter ID to use directly")]
+        /// Filter ID to run (uses configured default when omitted).
+        #[arg(long)]
         filter_id: Option<String>,
-        #[arg(short, long, help = "Maximum number of results to return")]
+        /// Maximum number of results to return.
+        #[arg(short, long)]
         max_results: Option<u32>,
     },
 }
