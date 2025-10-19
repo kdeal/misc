@@ -11,13 +11,13 @@ use super::{Message, Role};
 #[allow(dead_code)]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub enum AnthropicModel {
-    #[serde(alias = "claude-3-5-haiku-20241022")]
-    #[serde(rename = "claude-3-5-haiku-latest")]
-    Claude35Haiku,
+    #[serde(alias = "claude-haiku-4-5-latest")]
+    #[serde(rename = "claude-haiku-4-5-20251001")]
+    Claude45Haiku,
     #[default]
-    #[serde(alias = "claude-3-7-sonnet-20250219")]
-    #[serde(rename = "claude-3-7-sonnet-latest")]
-    Claude37Sonnet,
+    #[serde(alias = "claude-sonnet-4-5-latest")]
+    #[serde(rename = "claude-sonnet-4-5-20250929")]
+    Claude45Sonnet,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -259,9 +259,9 @@ impl super::Chat for AnthropicClient {
                 content: request.query,
             }],
             model: match request.model_type {
-                super::ModelType::Small => AnthropicModel::Claude35Haiku,
-                super::ModelType::Large => AnthropicModel::Claude37Sonnet,
-                super::ModelType::Thinking => AnthropicModel::Claude37Sonnet,
+                super::ModelType::Small => AnthropicModel::Claude45Haiku,
+                super::ModelType::Large => AnthropicModel::Claude45Sonnet,
+                super::ModelType::Thinking => AnthropicModel::Claude45Sonnet,
             },
             // Double max tokens for thinking to account for thinking tokens
             max_tokens: match request.model_type {
