@@ -2,12 +2,11 @@ use anyhow::{anyhow, Context};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{Config, OllamaConfig},
+    config::{default_ollama_base_url, Config, OllamaConfig},
     llm::{ChatRequest, ChatResponse, LlmProvider, Message, ModelType, Role},
 };
 
 const CHAT_ENDPOINT: &str = "/api/chat";
-const DEFAULT_BASE_URL: &str = "http://localhost:11434";
 
 #[derive(Debug, Serialize)]
 struct OllamaChatRequest {
@@ -52,9 +51,9 @@ impl OllamaClient {
 fn sanitize_base_url(config: &OllamaConfig) -> String {
     let trimmed = config.base_url.trim();
     let base = if trimmed.is_empty() {
-        DEFAULT_BASE_URL
+        default_ollama_base_url()
     } else {
-        trimmed
+        trimmed.to_string()
     };
 
     base.trim_end_matches('/').to_string()
