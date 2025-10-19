@@ -197,7 +197,7 @@ fn default_repo_base_dir() -> String {
     "~/repos/".to_string()
 }
 
-fn default_ollama_base_url() -> String {
+pub(crate) fn default_ollama_base_url() -> String {
     "http://localhost:11434".to_string()
 }
 
