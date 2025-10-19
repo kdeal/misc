@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{config::Config, prompts::basic_prompt};
 
 pub mod anthropic;
+pub mod ollama;
 pub mod perplexity;
 pub mod vertex_ai;
 

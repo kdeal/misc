@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::llm::{
-    anthropic::AnthropicClient, perplexity::PerplexityClient, vertex_ai::VertexAiClient, Chat,
-    GroundedChat, LlmProvider,
+    anthropic::AnthropicClient, ollama::OllamaClient, perplexity::PerplexityClient,
+    vertex_ai::VertexAiClient, Chat, GroundedChat, LlmProvider,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, ValueEnum)]
@@ -36,6 +36,7 @@ impl WebChatProvider {
 pub enum ChatProvider {
     VertexAI,
     Anthropic,
+    Ollama,
 }
 
 impl ChatProvider {
@@ -43,6 +44,7 @@ impl ChatProvider {
         match self {
             ChatProvider::VertexAI => Ok(Box::new(VertexAiClient::from_config(config)?)),
             ChatProvider::Anthropic => Ok(Box::new(AnthropicClient::from_config(config)?)),
+            ChatProvider::Ollama => Ok(Box::new(OllamaClient::from_config(config)?)),
         }
     }
 }
@@ -60,6 +62,23 @@ pub struct JiraConfig {
     pub api_token: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+/// Configuration for the Ollama chat provider.
+pub struct OllamaConfig {
+    /// Base URL for the Ollama server. Defaults to `http://localhost:11434` when omitted or left
+    /// blank.
+    #[serde(default = "default_ollama_base_url")]
+    pub base_url: String,
+    /// Model to use for [`ModelType::Small`](crate::llm::ModelType).
+    pub small: Option<String>,
+    /// Model to use for [`ModelType::Large`](crate::llm::ModelType). Falls back to the `small`
+    /// model when unspecified.
+    pub large: Option<String>,
+    /// Model to use for [`ModelType::Thinking`](crate::llm::ModelType). Falls back to the `large`
+    /// model when unspecified.
+    pub thinking: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
     #[serde(default = "default_repo_base_dir")]
@@ -71,6 +90,7 @@ pub struct Config {
     pub anthropic_api_key: Option<String>,
     pub perplexity_api_key: Option<String>,
     pub vertex_ai: Option<VertexAiConfig>,
+    pub ollama: Option<OllamaConfig>,
     /// GitHub API tokens mapped by host (e.g., github.com or github.example.com)
     #[serde(default)]
     pub github_tokens: HashMap<String, String>,
@@ -165,12 +185,20 @@ impl Config {
             return Some(ChatProvider::VertexAI);
         }
 
+        if self.ollama.is_some() {
+            return Some(ChatProvider::Ollama);
+        }
+
         None
     }
 }
 
 fn default_repo_base_dir() -> String {
     "~/repos/".to_string()
+}
+
+fn default_ollama_base_url() -> String {
+    "http://localhost:11434".to_string()
 }
 
 /// Creates a PathBuf from a string. Handles converting ~/ to home dir
