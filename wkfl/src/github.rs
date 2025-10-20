@@ -24,52 +24,27 @@ pub struct User {
 
 /// A GitHub issue/PR comment (timeline comment)
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct IssueComment {
-    pub id: u64,
     pub body: String,
     pub user: User,
     pub created_at: String,
-    pub updated_at: String,
-    pub html_url: String,
 }
 
 /// A GitHub pull request review comment (diff comment)
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct ReviewComment {
-    pub id: u64,
     pub body: String,
     pub user: User,
     pub created_at: String,
-    pub updated_at: String,
-    pub html_url: String,
     pub path: String,
-    pub line: Option<u32>,
     pub original_line: Option<u32>,
     /// The first line of the range in the original diff for a multi-line comment
     pub original_start_line: Option<u32>,
     pub diff_hunk: String,
-    #[serde(default)]
-    pub in_reply_to_id: Option<u64>,
     /// The side of the diff (LEFT for deletions, RIGHT for additions)
     pub side: String,
-    /// The first line of the range for a multi-line comment
-    pub start_line: Option<u32>,
-    /// The side of the first line of the range for a multi-line comment  
+    /// The side of the first line of the range for a multi-line comment
     pub start_side: Option<String>,
-    /// The SHA of the commit needing a comment
-    pub commit_id: String,
-    /// The SHA of the original commit (for multi-commit PRs)
-    pub original_commit_id: String,
-}
-
-/// A GitHub pull request review
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct Review {
-    pub id: u64,
-    pub state: String, // "APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"
 }
 
 /// Container for all PR comment types
