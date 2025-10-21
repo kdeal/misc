@@ -2,7 +2,7 @@ use crate::config::resolve_secret;
 use crate::config::Config;
 use crate::git::host_from_remote_url;
 use anyhow::{anyhow, Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 /// A GitHub pull request minimal representation
 #[derive(Debug, Deserialize)]
@@ -47,6 +47,82 @@ pub struct ReviewComment {
     pub start_side: Option<String>,
 }
 
+/// GraphQL request structure
+#[derive(Debug, Serialize)]
+struct GraphQLRequest {
+    query: String,
+    variables: serde_json::Value,
+}
+
+/// GraphQL response structures for review comments
+#[derive(Debug, Deserialize)]
+struct GraphQLResponse {
+    data: Option<GraphQLData>,
+    errors: Option<Vec<GraphQLError>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLError {
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLData {
+    repository: GraphQLRepository,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLRepository {
+    #[serde(rename = "pullRequest")]
+    pull_request: GraphQLPullRequest,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLPullRequest {
+    #[serde(rename = "reviewThreads")]
+    review_threads: GraphQLReviewThreadConnection,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLReviewThreadConnection {
+    nodes: Vec<GraphQLReviewThread>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLReviewThread {
+    comments: GraphQLReviewCommentConnection,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLReviewCommentConnection {
+    nodes: Vec<GraphQLReviewComment>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLReviewComment {
+    body: String,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+    path: String,
+    #[serde(rename = "originalLine")]
+    original_line: Option<u32>,
+    #[serde(rename = "originalStartLine")]
+    original_start_line: Option<u32>,
+    #[serde(rename = "diffHunk")]
+    diff_hunk: String,
+    side: String,
+    #[serde(rename = "startSide")]
+    start_side: Option<String>,
+    author: GraphQLAuthor,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLAuthor {
+    login: String,
+    #[serde(rename = "__typename")]
+    typename: String,
+}
+
 /// Container for all PR comment types
 #[derive(Debug)]
 pub struct PrComments {
@@ -57,18 +133,29 @@ pub struct PrComments {
 /// Client for interacting with the GitHub API
 pub struct GitHubClient {
     api_base: String,
+    graphql_endpoint: String,
     token: String,
 }
 
 impl GitHubClient {
     /// Create a new GitHub client
     pub fn new(host: String, token: String) -> Self {
-        let api_base = if host == "github.com" {
-            "https://api.github.com".to_string()
+        let (api_base, graphql_endpoint) = if host == "github.com" {
+            (
+                "https://api.github.com".to_string(),
+                "https://api.github.com/graphql".to_string(),
+            )
         } else {
-            format!("https://{host}/api/v3")
+            (
+                format!("https://{host}/api/v3"),
+                format!("https://{host}/api/graphql"),
+            )
         };
-        GitHubClient { api_base, token }
+        GitHubClient {
+            api_base,
+            graphql_endpoint,
+            token,
+        }
     }
 
     /// Make a GET request to the GitHub API
@@ -92,6 +179,36 @@ impl GitHubClient {
                 )
             })?;
         Ok(resp)
+    }
+
+    /// Make a GraphQL request to the GitHub API
+    fn api_graphql(&self, query: &str, variables: serde_json::Value) -> Result<GraphQLResponse> {
+        let request = GraphQLRequest {
+            query: query.to_string(),
+            variables,
+        };
+
+        let resp = ureq::post(&self.graphql_endpoint)
+            .set("Authorization", &format!("Bearer {}", &self.token))
+            .set("User-Agent", "wkfl")
+            .set("Content-Type", "application/json")
+            .send_json(&request)
+            .with_context(|| "Failed to query GitHub GraphQL API")?;
+
+        let graphql_resp: GraphQLResponse = resp
+            .into_json()
+            .with_context(|| "Failed to parse GraphQL response as JSON")?;
+
+        // Check for GraphQL errors
+        if let Some(errors) = &graphql_resp.errors {
+            let error_messages: Vec<String> = errors.iter().map(|e| e.message.clone()).collect();
+            return Err(anyhow!(
+                "GraphQL API returned errors: {}",
+                error_messages.join(", ")
+            ));
+        }
+
+        Ok(graphql_resp)
     }
 
     /// List pull requests associated with a specific commit SHA
@@ -145,29 +262,80 @@ impl GitHubClient {
         Ok(comments)
     }
 
-    /// Get review/diff comments for a PR
+    /// Get review/diff comments for a PR using GraphQL API
     fn get_review_comments(
         &self,
         owner: &str,
         repo: &str,
         pr_number: u64,
     ) -> Result<Vec<ReviewComment>> {
-        let resp = self
-            .api_get(&[
-                "repos",
-                owner,
-                repo,
-                "pulls",
-                &pr_number.to_string(),
-                "comments",
-            ])
+        let query = r#"
+            query($owner: String!, $repo: String!, $number: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $number) {
+                  reviewThreads(first: 100) {
+                    nodes {
+                      comments(first: 100) {
+                        nodes {
+                          body
+                          createdAt
+                          path
+                          originalLine
+                          diffHunk
+                          side
+                          startSide
+                          originalStartLine
+                          author {
+                            login
+                            __typename
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+        "#;
+
+        let variables = serde_json::json!({
+            "owner": owner,
+            "repo": repo,
+            "number": pr_number,
+        });
+
+        let graphql_resp = self
+            .api_graphql(query, variables)
             .with_context(|| {
-                format!("Failed to query GitHub API for PR #{pr_number} review comments")
+                format!("Failed to query GitHub GraphQL API for PR #{pr_number} review comments")
             })?;
 
-        let comments: Vec<ReviewComment> = resp
-            .into_json()
-            .with_context(|| "Failed to parse GitHub review comments response as JSON")?;
+        // Extract comments from the nested GraphQL response
+        let data = graphql_resp
+            .data
+            .ok_or_else(|| anyhow!("GraphQL response missing data field"))?;
+
+        let mut comments = Vec::new();
+        for thread in data.repository.pull_request.review_threads.nodes {
+            for gql_comment in thread.comments.nodes {
+                // Convert GraphQL comment to ReviewComment
+                comments.push(ReviewComment {
+                    body: gql_comment.body,
+                    user: User {
+                        login: gql_comment.author.login,
+                        user_type: gql_comment.author.typename,
+                    },
+                    created_at: gql_comment.created_at,
+                    path: gql_comment.path,
+                    original_line: gql_comment.original_line,
+                    original_start_line: gql_comment.original_start_line,
+                    diff_hunk: gql_comment.diff_hunk,
+                    side: gql_comment.side,
+                    start_side: gql_comment.start_side,
+                });
+            }
+        }
+
         Ok(comments)
     }
 }
