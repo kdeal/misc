@@ -1,6 +1,10 @@
 use crate::config::resolve_secret;
 use crate::config::Config;
 use crate::git::host_from_remote_url;
+use crate::gql_queries;
+use crate::gql_queries::review_comments::{
+    GraphQLReviewCommentConnection, GraphQLReviewCommentNode, GraphQLReviewCommentsData,
+};
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use serde_json::json;
@@ -63,35 +67,6 @@ pub struct GitHubClient {
 }
 
 impl GitHubClient {
-    const REVIEW_COMMENTS_QUERY: &'static str = r#"
-        query($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) {
-            repository(owner: $owner, name: $name) {
-                pullRequest(number: $prNumber) {
-                    reviewComments(first: 100, after: $cursor) {
-                        nodes {
-                            body
-                            author {
-                                login
-                                __typename
-                            }
-                            createdAt
-                            path
-                            originalLine
-                            originalStartLine
-                            diffHunk
-                            side
-                            startSide
-                        }
-                        pageInfo {
-                            hasNextPage
-                            endCursor
-                        }
-                    }
-                }
-            }
-        }
-    "#;
-
     /// Create a new GitHub client
     pub fn new(host: String, token: String) -> Self {
         let (api_base, graphql_base) = if host == "github.com" {
@@ -205,7 +180,7 @@ impl GitHubClient {
             });
 
             let data: GraphQLReviewCommentsData = self
-                .graphql_query(Self::REVIEW_COMMENTS_QUERY, variables)
+                .graphql_query(gql_queries::review_comments::QUERY, variables)
                 .with_context(|| {
                     format!(
                         "Failed to query GitHub GraphQL API for PR #{pr_number} review comments"
@@ -255,7 +230,7 @@ impl GitHubClient {
             .send_json(json!({ "query": query, "variables": variables }))
             .with_context(|| "Failed to execute GitHub GraphQL request")?;
 
-        let parsed: GraphQLResponse<T> = response
+        let parsed: gql_queries::GraphQLResponse<T> = response
             .into_json()
             .with_context(|| "Failed to parse GitHub GraphQL response as JSON")?;
 
@@ -272,74 +247,6 @@ impl GitHubClient {
             .data
             .ok_or_else(|| anyhow!("GitHub GraphQL response missing data"))
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLResponse<T> {
-    data: Option<T>,
-    errors: Option<Vec<GraphQLError>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLError {
-    message: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLReviewCommentsData {
-    repository: Option<GraphQLRepository>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLRepository {
-    #[serde(rename = "pullRequest")]
-    pull_request: Option<GraphQLPullRequest>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLPullRequest {
-    #[serde(rename = "reviewComments")]
-    review_comments: GraphQLReviewCommentConnection,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLReviewCommentConnection {
-    nodes: Vec<GraphQLReviewCommentNode>,
-    #[serde(rename = "pageInfo")]
-    page_info: GraphQLPageInfo,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLPageInfo {
-    #[serde(rename = "hasNextPage")]
-    has_next_page: bool,
-    #[serde(rename = "endCursor")]
-    end_cursor: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLReviewCommentNode {
-    body: String,
-    author: Option<GraphQLAuthor>,
-    #[serde(rename = "createdAt")]
-    created_at: String,
-    path: String,
-    #[serde(rename = "originalLine")]
-    original_line: Option<u32>,
-    #[serde(rename = "originalStartLine")]
-    original_start_line: Option<u32>,
-    #[serde(rename = "diffHunk")]
-    diff_hunk: String,
-    side: String,
-    #[serde(rename = "startSide")]
-    start_side: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLAuthor {
-    login: String,
-    #[serde(rename = "__typename")]
-    typename: String,
 }
 
 impl From<GraphQLReviewCommentNode> for ReviewComment {
