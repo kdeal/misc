@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::git::host_from_remote_url;
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
+use serde_json::json;
 use url::Url;
 /// A GitHub pull request minimal representation
 #[derive(Debug, Deserialize)]
@@ -57,18 +58,58 @@ pub struct PrComments {
 /// Client for interacting with the GitHub API
 pub struct GitHubClient {
     api_base: String,
+    graphql_base: String,
     token: String,
 }
 
 impl GitHubClient {
+    const REVIEW_COMMENTS_QUERY: &'static str = r#"
+        query($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) {
+            repository(owner: $owner, name: $name) {
+                pullRequest(number: $prNumber) {
+                    reviewComments(first: 100, after: $cursor) {
+                        nodes {
+                            body
+                            author {
+                                login
+                                __typename
+                            }
+                            createdAt
+                            path
+                            originalLine
+                            originalStartLine
+                            diffHunk
+                            side
+                            startSide
+                        }
+                        pageInfo {
+                            hasNextPage
+                            endCursor
+                        }
+                    }
+                }
+            }
+        }
+    "#;
+
     /// Create a new GitHub client
     pub fn new(host: String, token: String) -> Self {
-        let api_base = if host == "github.com" {
-            "https://api.github.com".to_string()
+        let (api_base, graphql_base) = if host == "github.com" {
+            (
+                "https://api.github.com".to_string(),
+                "https://api.github.com/graphql".to_string(),
+            )
         } else {
-            format!("https://{host}/api/v3")
+            (
+                format!("https://{host}/api/v3"),
+                format!("https://{host}/api/graphql"),
+            )
         };
-        GitHubClient { api_base, token }
+        GitHubClient {
+            api_base,
+            graphql_base,
+            token,
+        }
     }
 
     /// Make a GET request to the GitHub API
@@ -152,23 +193,179 @@ impl GitHubClient {
         repo: &str,
         pr_number: u64,
     ) -> Result<Vec<ReviewComment>> {
-        let resp = self
-            .api_get(&[
-                "repos",
-                owner,
-                repo,
-                "pulls",
-                &pr_number.to_string(),
-                "comments",
-            ])
-            .with_context(|| {
-                format!("Failed to query GitHub API for PR #{pr_number} review comments")
+        let mut all_comments = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        loop {
+            let variables = json!({
+                "owner": owner,
+                "name": repo,
+                "prNumber": pr_number as i64,
+                "cursor": cursor.clone(),
+            });
+
+            let data: GraphQLReviewCommentsData = self
+                .graphql_query(Self::REVIEW_COMMENTS_QUERY, variables)
+                .with_context(|| {
+                    format!(
+                        "Failed to query GitHub GraphQL API for PR #{pr_number} review comments"
+                    )
+                })?;
+
+            let repository = data.repository.ok_or_else(|| {
+                anyhow!(
+                    "Repository '{}/{}' not found when fetching review comments",
+                    owner,
+                    repo
+                )
+            })?;
+            let pull_request = repository.pull_request.ok_or_else(|| {
+                anyhow!(
+                    "Pull request #{} not found in repository '{}/{}'",
+                    pr_number,
+                    owner,
+                    repo
+                )
             })?;
 
-        let comments: Vec<ReviewComment> = resp
+            let GraphQLReviewCommentConnection { nodes, page_info } = pull_request.review_comments;
+            all_comments.extend(nodes.into_iter().map(ReviewComment::from));
+
+            if page_info.has_next_page {
+                cursor = page_info.end_cursor;
+                if cursor.is_none() {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(all_comments)
+    }
+
+    fn graphql_query<T>(&self, query: &str, variables: serde_json::Value) -> Result<T>
+    where
+        T: for<'de> Deserialize<'de>,
+    {
+        let response = ureq::post(&self.graphql_base)
+            .set("Authorization", &format!("Bearer {}", &self.token))
+            .set("User-Agent", "wkfl")
+            .set("Accept", "application/vnd.github+json")
+            .send_json(json!({ "query": query, "variables": variables }))
+            .with_context(|| "Failed to execute GitHub GraphQL request")?;
+
+        let parsed: GraphQLResponse<T> = response
             .into_json()
-            .with_context(|| "Failed to parse GitHub review comments response as JSON")?;
-        Ok(comments)
+            .with_context(|| "Failed to parse GitHub GraphQL response as JSON")?;
+
+        if let Some(errors) = parsed.errors {
+            let messages = errors
+                .into_iter()
+                .map(|error| error.message)
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(anyhow!("GitHub GraphQL API returned errors: {messages}"));
+        }
+
+        parsed
+            .data
+            .ok_or_else(|| anyhow!("GitHub GraphQL response missing data"))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLResponse<T> {
+    data: Option<T>,
+    errors: Option<Vec<GraphQLError>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLError {
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLReviewCommentsData {
+    repository: Option<GraphQLRepository>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLRepository {
+    #[serde(rename = "pullRequest")]
+    pull_request: Option<GraphQLPullRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLPullRequest {
+    #[serde(rename = "reviewComments")]
+    review_comments: GraphQLReviewCommentConnection,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLReviewCommentConnection {
+    nodes: Vec<GraphQLReviewCommentNode>,
+    #[serde(rename = "pageInfo")]
+    page_info: GraphQLPageInfo,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLPageInfo {
+    #[serde(rename = "hasNextPage")]
+    has_next_page: bool,
+    #[serde(rename = "endCursor")]
+    end_cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLReviewCommentNode {
+    body: String,
+    author: Option<GraphQLAuthor>,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+    path: String,
+    #[serde(rename = "originalLine")]
+    original_line: Option<u32>,
+    #[serde(rename = "originalStartLine")]
+    original_start_line: Option<u32>,
+    #[serde(rename = "diffHunk")]
+    diff_hunk: String,
+    side: String,
+    #[serde(rename = "startSide")]
+    start_side: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLAuthor {
+    login: String,
+    #[serde(rename = "__typename")]
+    typename: String,
+}
+
+impl From<GraphQLReviewCommentNode> for ReviewComment {
+    fn from(node: GraphQLReviewCommentNode) -> Self {
+        let user = node
+            .author
+            .map(|author| User {
+                login: author.login,
+                user_type: author.typename,
+            })
+            .unwrap_or_else(|| User {
+                login: "unknown".to_string(),
+                user_type: "Unknown".to_string(),
+            });
+
+        ReviewComment {
+            body: node.body,
+            user,
+            created_at: node.created_at,
+            path: node.path,
+            original_line: node.original_line,
+            original_start_line: node.original_start_line,
+            diff_hunk: node.diff_hunk,
+            side: node.side,
+            start_side: node.start_side,
+        }
     }
 }
 
