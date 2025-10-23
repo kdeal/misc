@@ -218,9 +218,9 @@ enum TodoCommands {
         /// Add item after the specified 1-based index.
         #[arg(short, long, conflicts_with = "top")]
         after: Option<usize>,
-        /// Nest item under the previous item (increases indentation).
+        /// Section name to add the item to.
         #[arg(short, long)]
-        nest: bool,
+        section: Option<String>,
     },
     /// Remove an item from the todo list by index.
     Remove {
@@ -449,8 +449,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 description,
                 top,
                 after,
-                nest,
-            } => todo::add_todo(&context.config, description.clone(), top, after, nest)?,
+                section,
+            } => todo::add_todo(&context.config, description.clone(), section, top, after)?,
             TodoCommands::Remove { index } => todo::remove_todo(&context.config, index)?,
             TodoCommands::Check { index } => todo::check_todo(&context.config, index)?,
             TodoCommands::Uncheck { index } => todo::uncheck_todo(&context.config, index)?,
