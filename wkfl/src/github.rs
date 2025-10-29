@@ -4,9 +4,10 @@ use crate::git::host_from_remote_url;
 use crate::gql_queries;
 use crate::gql_queries::review_comments::{
     GraphQLReviewCommentConnection, GraphQLReviewCommentNode, GraphQLReviewCommentsData,
+    GraphQLReviewCommentsVariables,
 };
 use anyhow::{anyhow, Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 /// A GitHub pull request minimal representation
@@ -172,15 +173,15 @@ impl GitHubClient {
         let mut cursor: Option<String> = None;
 
         loop {
-            let variables = json!({
-                "owner": owner,
-                "name": repo,
-                "prNumber": pr_number as i64,
-                "cursor": cursor.clone(),
-            });
+            let variables = GraphQLReviewCommentsVariables {
+                owner,
+                name: repo,
+                pr_number: pr_number as i64,
+                cursor: cursor.as_deref(),
+            };
 
             let data: GraphQLReviewCommentsData = self
-                .graphql_query(gql_queries::review_comments::QUERY, variables)
+                .graphql_query(gql_queries::review_comments::QUERY, &variables)
                 .with_context(|| {
                     format!(
                         "Failed to query GitHub GraphQL API for PR #{pr_number} review comments"
@@ -219,9 +220,10 @@ impl GitHubClient {
         Ok(all_comments)
     }
 
-    fn graphql_query<T>(&self, query: &str, variables: serde_json::Value) -> Result<T>
+    fn graphql_query<T, V>(&self, query: &str, variables: &V) -> Result<T>
     where
         T: for<'de> Deserialize<'de>,
+        V: ?Sized + Serialize,
     {
         let response = ureq::post(&self.graphql_base)
             .set("Authorization", &format!("Bearer {}", &self.token))

@@ -1,6 +1,15 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub const QUERY: &str = include_str!("review_comments.graphql");
+
+#[derive(Debug, Serialize)]
+pub struct GraphQLReviewCommentsVariables<'a> {
+    pub owner: &'a str,
+    pub name: &'a str,
+    #[serde(rename = "prNumber")]
+    pub pr_number: i64,
+    pub cursor: Option<&'a str>,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct GraphQLReviewCommentsData {
