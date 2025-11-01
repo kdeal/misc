@@ -3,8 +3,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Returns `true` when the directory contains metadata for a supported VCS
+/// repository. Currently, a directory is considered a repository if it has a
+/// `.git` or `.jj` subdirectory, allowing the `repos` command to surface both
+/// Git and Jujutsu repositories.
 fn is_dir_a_repo(directory: &Path) -> bool {
-    directory.join(".git").as_path().exists()
+    let has_git_dir = directory.join(".git").as_path().exists();
+    let has_jj_dir = directory.join(".jj").as_path().exists();
+
+    has_git_dir || has_jj_dir
 }
 
 fn check_read_dir_entry(dir_entry_result: io::Result<fs::DirEntry>) -> Option<PathBuf> {
@@ -56,4 +63,36 @@ pub fn get_repositories_in_directory(directory: &Path) -> anyhow::Result<Vec<Pat
         }
     }
     Ok(repositories)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_dir_a_repo;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn assert_repo_detection(metadata_dir: Option<&str>, expected: bool) {
+        let temp_dir = tempdir().expect("failed to create temp directory");
+        if let Some(dir_name) = metadata_dir {
+            let metadata_path = temp_dir.path().join(dir_name);
+            fs::create_dir(&metadata_path).expect("failed to create metadata directory");
+        }
+
+        assert_eq!(is_dir_a_repo(temp_dir.path()), expected);
+    }
+
+    #[test]
+    fn detects_git_repository_directories() {
+        assert_repo_detection(Some(".git"), true);
+    }
+
+    #[test]
+    fn detects_jujutsu_repository_directories() {
+        assert_repo_detection(Some(".jj"), true);
+    }
+
+    #[test]
+    fn returns_false_for_directories_without_vcs_metadata() {
+        assert_repo_detection(None, false);
+    }
 }
