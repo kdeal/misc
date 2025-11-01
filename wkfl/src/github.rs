@@ -51,6 +51,8 @@ pub struct ReviewComment {
     pub side: String,
     /// The side of the first line of the range for a multi-line comment
     pub start_side: Option<String>,
+    /// Indicates whether the review thread containing this comment is resolved
+    pub is_resolved: Option<bool>,
 }
 
 /// Container for all PR comment types
@@ -253,8 +255,20 @@ impl GitHubClient {
 
 impl From<GraphQLReviewCommentNode> for ReviewComment {
     fn from(node: GraphQLReviewCommentNode) -> Self {
-        let user = node
-            .author
+        let GraphQLReviewCommentNode {
+            body,
+            author,
+            created_at,
+            path,
+            original_line,
+            original_start_line,
+            diff_hunk,
+            side,
+            start_side,
+            pull_request_review_thread,
+        } = node;
+
+        let user = author
             .map(|author| User {
                 login: author.login,
                 user_type: author.typename,
@@ -265,15 +279,16 @@ impl From<GraphQLReviewCommentNode> for ReviewComment {
             });
 
         ReviewComment {
-            body: node.body,
+            body,
             user,
-            created_at: node.created_at,
-            path: node.path,
-            original_line: node.original_line,
-            original_start_line: node.original_start_line,
-            diff_hunk: node.diff_hunk,
-            side: node.side,
-            start_side: node.start_side,
+            created_at,
+            path,
+            original_line,
+            original_start_line,
+            diff_hunk,
+            side,
+            start_side,
+            is_resolved: pull_request_review_thread.map(|thread| thread.is_resolved),
         }
     }
 }
