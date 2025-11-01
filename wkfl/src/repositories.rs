@@ -64,3 +64,79 @@ pub fn get_repositories_in_directory(directory: &Path) -> anyhow::Result<Vec<Pat
     }
     Ok(repositories)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::is_dir_a_repo;
+    use std::{
+        fs,
+        path::PathBuf,
+        process,
+        sync::atomic::{AtomicUsize, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    static TEST_DIR_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    struct TestDirectory {
+        path: PathBuf,
+    }
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let mut path = std::env::temp_dir();
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time went backwards")
+                .as_nanos();
+            let unique_suffix = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+            path.push(format!(
+                "wkfl-repo-test-{}-{}-{}",
+                process::id(),
+                timestamp,
+                unique_suffix
+            ));
+            fs::create_dir_all(&path).expect("failed to create temp directory");
+            Self { path }
+        }
+
+        fn create_metadata_dir(&self, dir_name: &str) {
+            let metadata_path = self.path.join(dir_name);
+            fs::create_dir(&metadata_path).expect("failed to create metadata directory");
+        }
+
+        fn path(&self) -> &PathBuf {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn assert_repo_detection(metadata_dir: Option<&str>, expected: bool) {
+        let temp_dir = TestDirectory::new();
+        if let Some(dir_name) = metadata_dir {
+            temp_dir.create_metadata_dir(dir_name);
+        }
+
+        assert_eq!(is_dir_a_repo(temp_dir.path()), expected);
+    }
+
+    #[test]
+    fn detects_git_repository_directories() {
+        assert_repo_detection(Some(".git"), true);
+    }
+
+    #[test]
+    fn detects_jujutsu_repository_directories() {
+        assert_repo_detection(Some(".jj"), true);
+    }
+
+    #[test]
+    fn returns_false_for_directories_without_vcs_metadata() {
+        assert_repo_detection(None, false);
+    }
+}
