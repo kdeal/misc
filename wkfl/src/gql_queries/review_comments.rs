@@ -59,6 +59,8 @@ pub struct GraphQLReviewCommentNode {
     pub side: String,
     #[serde(rename = "startSide")]
     pub start_side: Option<String>,
+    #[serde(rename = "pullRequestReviewThread")]
+    pub pull_request_review_thread: Option<GraphQLReviewThread>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,4 +68,10 @@ pub struct GraphQLAuthor {
     pub login: String,
     #[serde(rename = "__typename")]
     pub typename: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GraphQLReviewThread {
+    #[serde(rename = "isResolved")]
+    pub is_resolved: bool,
 }
