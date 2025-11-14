@@ -1,4 +1,8 @@
-use std::{path::Path, process::Command, str::FromStr};
+use std::{
+    path::Path,
+    process::{Command, Stdio},
+    str::FromStr,
+};
 
 use anyhow::{self, bail};
 use url::Url;
@@ -153,9 +157,27 @@ pub fn get_worktrees(repo: &Repository) -> anyhow::Result<Vec<String>> {
 pub fn clone_repo(repo_url: &str, repo_path: &Path) -> anyhow::Result<()> {
     info!("Cloing {} into {}...", repo_url, repo_path.display());
     // Shell out to git for clone because libgit2 doesn't take into account .ssh/config
-    let clone_output = Command::new("git")
-        .args(["clone", repo_url, &repo_path.to_string_lossy()])
-        .output()?;
+    // Prefer using jj if available so worktrees are configured as expected.
+    let destination = repo_path.to_string_lossy().to_string();
+    let jj_available = Command::new("jj")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+
+    let mut command = if jj_available {
+        let mut cmd = Command::new("jj");
+        cmd.args(["git", "clone", repo_url, &destination]);
+        cmd
+    } else {
+        let mut cmd = Command::new("git");
+        cmd.args(["clone", repo_url, &destination]);
+        cmd
+    };
+
+    let clone_output = command.output()?;
     if !clone_output.status.success() {
         anyhow::bail!(
             "Failed to clone {}, output: {}",
