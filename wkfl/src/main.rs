@@ -35,10 +35,6 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Start working on a new feature.
-    Start,
-    /// End working on a feature.
-    End,
     /// Print diagnostic information about the current Git repository.
     RepoDebug,
     /// List repositories in the configured repositories directory.
@@ -334,8 +330,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         shell_actions: vec![],
     };
     match cli.command {
-        Commands::Start => actions::start_workflow(&mut context)?,
-        Commands::End => actions::end_workflow()?,
         Commands::RepoDebug => actions::print_repo_debug_info()?,
         Commands::Repos { full_path } => actions::list_repositories(context.config, full_path)?,
         Commands::Repo => actions::switch_repo(&mut context)?,

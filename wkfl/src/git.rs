@@ -1,25 +1,16 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::Command,
-    str::FromStr,
-};
+use std::{path::Path, process::Command, str::FromStr};
 
 use anyhow::{self, bail};
 use url::Url;
 
 use git2::{
     build::CheckoutBuilder, Branch, BranchType, Error, ErrorCode, Repository, RepositoryState,
-    StatusOptions, WorktreeAddOptions,
+    StatusOptions,
 };
 use log::{info, warn};
 
 pub fn get_repository() -> Result<Repository, Error> {
     Repository::open_from_env()
-}
-
-pub fn uses_worktrees(repo: &Repository) -> bool {
-    repo.is_worktree() || repo.is_bare()
 }
 
 pub fn get_default_branch(repo: &Repository) -> anyhow::Result<String> {
@@ -90,20 +81,6 @@ pub fn determine_repo_root_dir(repo: &Repository) -> &Path {
     }
 }
 
-pub fn create_worktree(
-    repo: &Repository,
-    name: &str,
-    branch_name: &str,
-) -> anyhow::Result<PathBuf> {
-    let new_branch = create_branch_from_default(repo, branch_name)?;
-    let mut worktree_opts = WorktreeAddOptions::new();
-    worktree_opts.reference(Some(new_branch.get()));
-    let repo_root = determine_repo_root_dir(repo);
-    let worktree_path = repo_root.join(name);
-    repo.worktree(name, &worktree_path, Some(&worktree_opts))?;
-    Ok(worktree_path)
-}
-
 pub fn switch_branch(repo: &Repository, branch_name: &str, create: bool) -> anyhow::Result<()> {
     let repo_state = repo.state();
     if repo_state != RepositoryState::Clean {
@@ -128,26 +105,6 @@ pub fn has_changes(repo: &Repository) -> anyhow::Result<bool> {
     status_options.include_ignored(false);
     status_options.include_untracked(true);
     Ok(!repo.statuses(Some(&mut status_options))?.is_empty())
-}
-
-pub fn remove_worktree(repo: &Repository, worktree_name: &str) -> anyhow::Result<()> {
-    let worktree = repo.find_worktree(worktree_name)?;
-    let worktree_repo = Repository::open(worktree.path())?;
-    let mut cur_branch = get_current_branch(&worktree_repo)?;
-    if has_changes(&worktree_repo)? {
-        bail!("Wortree has changes can't delete");
-    } else {
-        fs::remove_dir_all(worktree.path())?;
-    }
-    worktree.prune(None)?;
-    cur_branch.delete()?;
-    Ok(())
-}
-
-pub fn on_default_branch(repo: &Repository) -> anyhow::Result<bool> {
-    let current_branch = get_current_branch(repo)?;
-    let default_branch = get_default_branch(repo)?;
-    Ok(current_branch.name()?.unwrap_or("") == default_branch)
 }
 
 fn get_current_branch(repo: &Repository) -> anyhow::Result<Branch<'_>> {

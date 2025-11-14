@@ -28,63 +28,7 @@ use crate::prompts::Link;
 use crate::repositories::get_repositories_in_directory;
 use crate::shell_actions::ShellAction;
 use crate::utils;
-use crate::utils::run_commands;
 use crate::Context;
-
-pub fn start_workflow(context: &mut Context) -> anyhow::Result<()> {
-    let repo = git::get_repository()?;
-    let name = basic_prompt("Name:")?;
-    let ticket_str = basic_prompt("Ticket:")?;
-    let ticket = if ticket_str.is_empty() {
-        None
-    } else {
-        Some(ticket_str)
-    };
-
-    let user = utils::get_current_user().ok_or(anyhow::anyhow!("Unable to determine user"))?;
-    let branch_name = match ticket {
-        Some(ticket_key) => format!("{user}/{ticket_key}_{name}"),
-        None => format!("{user}/{name}"),
-    };
-
-    let repo_config = get_repo_config(git::determine_repo_root_dir(&repo))?;
-    run_commands(&repo_config.pre_start_commands)?;
-
-    if git::uses_worktrees(&repo) {
-        info!("Creating worktree named '{name}' on branch '{branch_name}'");
-        let worktree_path = git::create_worktree(&repo, &name, &branch_name)?;
-        context.shell_actions.push(ShellAction::Cd {
-            path: worktree_path,
-        });
-    } else {
-        info!("Creating branch '{branch_name}' and checking it out");
-        git::switch_branch(&repo, &branch_name, true)?;
-    };
-
-    run_commands(&repo_config.post_start_commands)?;
-
-    Ok(())
-}
-
-pub fn end_workflow() -> anyhow::Result<()> {
-    let repo = git::get_repository()?;
-    let repo_config = get_repo_config(git::determine_repo_root_dir(&repo))?;
-    run_commands(&repo_config.pre_end_commands)?;
-    if repo.is_worktree() {
-        anyhow::bail!("For worktree based repos call stop from base of repo with name of worktree");
-    } else if repo.is_bare() {
-        let worktrees = git::get_worktrees(&repo)?;
-        let workspace_name = select_prompt("Worktree Name:", &worktrees)?;
-        git::remove_worktree(&repo, workspace_name)?;
-    } else if git::on_default_branch(&repo)? {
-        let branch_name = basic_prompt("Branch Name:")?;
-        git::remove_branch(&repo, &branch_name)?;
-    } else {
-        git::remove_current_branch(&repo)?;
-    }
-    run_commands(&repo_config.post_end_commands)?;
-    Ok(())
-}
 
 pub fn list_repositories(config: Config, full_path: bool) -> anyhow::Result<()> {
     let base_repo_path = config.repositories_directory_path()?;
