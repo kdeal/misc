@@ -193,9 +193,33 @@ pub fn get_worktrees(repo: &Repository) -> anyhow::Result<Vec<String>> {
         .collect())
 }
 
+fn is_jj_available() -> bool {
+    Command::new("jj")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 pub fn clone_repo(repo_url: &str, repo_path: &Path) -> anyhow::Result<()> {
     info!("Cloing {} into {}...", repo_url, repo_path.display());
-    // Shell out to git for clone because libgit2 doesn't take into account .ssh/config
+
+    // Try jj git clone first if jj is available
+    if is_jj_available() {
+        info!("Using jj git clone...");
+        let jj_clone_output = Command::new("jj")
+            .args(["git", "clone", repo_url, &repo_path.to_string_lossy()])
+            .output()?;
+        if jj_clone_output.status.success() {
+            return Ok(());
+        }
+        warn!(
+            "jj git clone failed, falling back to git clone. Output: {}",
+            String::from_utf8_lossy(&jj_clone_output.stderr)
+        );
+    }
+
+    // Fall back to git clone (libgit2 doesn't take into account .ssh/config)
     let clone_output = Command::new("git")
         .args(["clone", repo_url, &repo_path.to_string_lossy()])
         .output()?;
