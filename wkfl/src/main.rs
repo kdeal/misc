@@ -10,6 +10,7 @@ mod actions;
 mod config;
 mod git;
 mod github;
+mod gql_queries;
 mod jira;
 mod llm;
 mod notes;

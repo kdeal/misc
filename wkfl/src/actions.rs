@@ -818,12 +818,18 @@ fn print_comments_markdown(
         if !diff_comments.is_empty() {
             println!("## Review Comments\n");
             for comment in diff_comments {
+                let resolved_marker = match comment.is_resolved {
+                    Some(true) => " [resolved]",
+                    Some(false) => " [unresolved]",
+                    None => "",
+                };
                 println!(
-                    "### @{} - {} ({}:{})",
+                    "### @{} - {} ({}:{}){}",
                     comment.user.login,
                     comment.created_at,
                     comment.path,
-                    comment.original_line.unwrap_or(0)
+                    comment.original_line.unwrap_or(0),
+                    resolved_marker
                 );
 
                 println!("\n**Code Context:**");
