@@ -3,11 +3,23 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/wkfl"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
       all-dependencies:
         patterns:
           - '*'
+    cooldown:
+      default-days: 28
+  - package-ecosystem: "cargo"
+    directory: "/wkfl-app/src-tauri"
+    schedule:
+      interval: "monthly"
+    groups:
+      all-dependencies:
+        patterns:
+          - '*'
+    cooldown:
+      default-days: 28
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -16,3 +28,15 @@ updates:
       all-dependencies:
         patterns:
           - '*'
+    cooldown:
+      default-days: 28
+  - package-ecosystem: "npm"
+    directory: "/wkfl-app"
+    schedule:
+      interval: "monthly"
+    groups:
+      all-dependencies:
+        patterns:
+          - '*'
+    cooldown:
+      default-days: 28
