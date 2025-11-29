@@ -1,0 +1,71 @@
+name: wkfl-app build and test
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths: ["wkfl-app/**"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wkfl-app
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+        cache-dependency-path: wkfl-app/pnpm-lock.yaml
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+    - name: Build frontend
+      run: pnpm run build
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Run Rust tests
+      run: cargo test --locked
+      working-directory: wkfl-app/src-tauri
+
+  macos-arm-build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: wkfl-app
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+        cache-dependency-path: wkfl-app/pnpm-lock.yaml
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-apple-darwin
+    - name: Build macOS arm64 bundle
+      uses: tauri-apps/tauri-action@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        projectPath: wkfl-app
+        args: --target aarch64-apple-darwin
+        tauriScript: pnpm tauri
