@@ -156,9 +156,7 @@ pub fn get_worktrees(repo: &Repository) -> anyhow::Result<Vec<String>> {
 
 pub fn clone_repo(repo_url: &str, repo_path: &Path) -> anyhow::Result<()> {
     info!("Cloing {} into {}...", repo_url, repo_path.display());
-    // Shell out to git for clone because libgit2 doesn't take into account .ssh/config
     // Prefer using jj if available so worktrees are configured as expected.
-    let destination = repo_path.to_string_lossy().to_string();
     let jj_available = Command::new("jj")
         .arg("--version")
         .stdout(Stdio::null())
@@ -169,11 +167,12 @@ pub fn clone_repo(repo_url: &str, repo_path: &Path) -> anyhow::Result<()> {
 
     let mut command = if jj_available {
         let mut cmd = Command::new("jj");
-        cmd.args(["git", "clone", repo_url, &destination]);
+        cmd.args(["git", "clone", repo_url]).arg(repo_path);
         cmd
     } else {
+        // Shell out to git for clone because libgit2 doesn't take into account .ssh/config
         let mut cmd = Command::new("git");
-        cmd.args(["clone", repo_url, &destination]);
+        cmd.args(["clone", repo_url]).arg(repo_path);
         cmd
     };
 
