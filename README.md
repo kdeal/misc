@@ -13,3 +13,6 @@ Container image for running the Ubiquiti UniFi Network Controller on demand.
 
 ## wkfl
 Rust command-line tool that streamlines and automates pieces of a personal workflow.
+
+## mimir_utils
+Go-based command-line utilities for exploring Mimir and Prometheus TSDB blocks.
