@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/prometheus/tsdb/chunks"
-	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/v3/model/labels"
+	"github.com/prometheus/prometheus/v3/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/v3/tsdb/chunks"
+	"github.com/prometheus/prometheus/v3/tsdb/index"
 )
 
 // MetricStat captures byte usage information for a metric across a set of blocks.

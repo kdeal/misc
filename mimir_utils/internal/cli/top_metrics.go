@@ -51,21 +51,18 @@ Options:
 }
 
 func humanReadableBytes(bytes int64) string {
-	if bytes < 1024 {
-		return fmt.Sprintf("%d B", bytes)
-	}
-
 	const unit = 1024.0
 	units := []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
 	val := float64(bytes)
-	exp := math.Floor(math.Log(val) / math.Log(unit))
-	if int(exp) >= len(units) {
-		exp = float64(len(units) - 1)
+	exp := 0
+
+	for val >= unit && exp < len(units)-1 {
+		val /= unit
+		exp++
 	}
 
-	value := val / math.Pow(unit, exp)
-	if value >= 10 || exp == 0 {
-		return fmt.Sprintf("%.0f %s", value, units[int(exp)])
+	if val >= 10 || exp == 0 {
+		return fmt.Sprintf("%.0f %s", val, units[exp])
 	}
-	return fmt.Sprintf("%.1f %s", value, units[int(exp)])
+	return fmt.Sprintf("%.1f %s", val, units[exp])
 }
