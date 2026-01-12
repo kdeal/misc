@@ -171,10 +171,10 @@ module drill_block_angled() {
                          r=locator_diameter/2, $fn=32);
         }
 
-        // Drill-through hole angled along the x-axis
-        translate([ 0, 0, -100 ])
-            rotate([ angled_drill_angle_deg, 0, 0 ])
-                cylinder(h=200, r=guide_radius, $fn=64);
+        // Drill-through hole angled along the y-axis
+        angled_hole_length = block_height_above + tongue_height + 200;
+        rotate([ 0, angled_drill_angle_deg, 0 ])
+            cylinder(h=angled_hole_length, r=guide_radius, $fn=64, center=true);
     }
 }
 
