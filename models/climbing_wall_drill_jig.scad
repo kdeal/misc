@@ -36,6 +36,7 @@ drill_bit_diameter_inch = 9/64;
 drill_bit_diameter      = drill_bit_diameter_inch * inch;
 guide_clearance         = 0.6;
 guide_radius            = (drill_bit_diameter + guide_clearance) / 2;
+angled_drill_angle_deg  = 10;
 
 // Indexing (1/8”)
 step_inch        = 1/8;
@@ -147,9 +148,41 @@ module drill_block() {
     }
 }
 
+// ---------------- Angled drill block ----------------
+
+module drill_block_angled() {
+    difference() {
+        union() {
+            // Main rounded block (full jig width)
+            linear_extrude(height = block_height_above)
+                rounded_rect_2d(block_length, block_width, fillet_r_block);
+
+            // Tongue
+            translate([ -tongue_length/2, -tongue_width/2, -tongue_height ])
+                cube([ tongue_length, tongue_width, tongue_height ]);
+
+            // Pins both sides (5 mm deep)
+            translate([ 0,  pin_y_block, -locator_pin_length ])
+                cylinder(h=locator_pin_length,
+                         r=locator_diameter/2, $fn=32);
+
+            translate([ 0, -pin_y_block, -locator_pin_length ])
+                cylinder(h=locator_pin_length,
+                         r=locator_diameter/2, $fn=32);
+        }
+
+        // Drill-through hole angled along the x-axis
+        translate([ 0, 0, -100 ])
+            rotate([ angled_drill_angle_deg, 0, 0 ])
+                cylinder(h=200, r=guide_radius, $fn=64);
+    }
+}
+
 // ---------------- View ----------------
 
 jig_body();
 
 // translate([0, block_width + 5, 0])
 // drill_block();
+// translate([0, -block_width - 5, 0])
+// drill_block_angled();
