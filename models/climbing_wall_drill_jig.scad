@@ -175,6 +175,13 @@ module drill_block_angled() {
         angled_hole_length = block_height_above + tongue_height + 200;
         rotate([ 0, angled_drill_angle_deg, 0 ])
             cylinder(h=angled_hole_length, r=guide_radius, $fn=64, center=true);
+
+        // Alignment line on top at the bottom exit point of the angled hole
+        exit_x = -tongue_height * tan(angled_drill_angle_deg);
+        line_depth = 0.6;
+        line_width = 0.8;
+        translate([ exit_x - line_width/2, -block_width/2, block_height_above - line_depth ])
+            cube([ line_width, block_width, line_depth + 0.1 ]);
     }
 }
 
