@@ -16,3 +16,6 @@ Rust command-line tool that streamlines and automates pieces of a personal workf
 
 ## wkfl-app
 Tauri desktop application scaffold that complements the wkfl tooling with a GUI experiment.
+
+## mimir_utils
+Go-based command-line utilities for exploring Mimir and Prometheus TSDB blocks.
