@@ -150,6 +150,7 @@ pub struct JiraClient {
 
 pub const JIRA_MAX_RESULTS_PER_PAGE: u32 = 100;
 
+#[allow(dead_code)]
 pub struct SearchPage {
     pub issues: Vec<Issue>,
     pub total: u32,
@@ -235,7 +236,7 @@ impl JiraClient {
         let mut issues = page.issues;
         let mut start_at = issues.len() as u32;
 
-        while issues.len() as u32 < limit && start_at < total {
+        while (issues.len() as u32) < limit && start_at < total {
             let remaining = limit.saturating_sub(issues.len() as u32);
             let page_size = remaining.min(JIRA_MAX_RESULTS_PER_PAGE);
             page = self.search_issues_page(jql, start_at, page_size)?;
