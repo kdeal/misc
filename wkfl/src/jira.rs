@@ -148,6 +148,16 @@ pub struct JiraClient {
     api_token: String,
 }
 
+pub const JIRA_MAX_RESULTS_PER_PAGE: u32 = 100;
+
+#[allow(dead_code)]
+pub struct SearchPage {
+    pub issues: Vec<Issue>,
+    pub total: u32,
+    pub start_at: u32,
+    pub max_results: u32,
+}
+
 impl JiraClient {
     /// Create a new Jira client
     pub fn new(instance_url: String, email: String, api_token: String) -> Self {
@@ -217,9 +227,39 @@ impl JiraClient {
 
     /// Search for issues using JQL
     pub fn search_issues(&self, jql: &str, max_results: Option<u32>) -> Result<Vec<Issue>> {
+        let first_page_size = max_results
+            .unwrap_or(JIRA_MAX_RESULTS_PER_PAGE)
+            .min(JIRA_MAX_RESULTS_PER_PAGE);
+        let mut page = self.search_issues_page(jql, 0, first_page_size)?;
+        let total = page.total;
+        let limit = max_results.unwrap_or(total);
+        let mut issues = page.issues;
+        let mut start_at = issues.len() as u32;
+
+        while (issues.len() as u32) < limit && start_at < total {
+            let remaining = limit.saturating_sub(issues.len() as u32);
+            let page_size = remaining.min(JIRA_MAX_RESULTS_PER_PAGE);
+            page = self.search_issues_page(jql, start_at, page_size)?;
+            if page.issues.is_empty() {
+                break;
+            }
+            start_at += page.issues.len() as u32;
+            issues.extend(page.issues);
+        }
+
+        Ok(issues)
+    }
+
+    pub fn search_issues_page(
+        &self,
+        jql: &str,
+        start_at: u32,
+        max_results: u32,
+    ) -> Result<SearchPage> {
         let query_params = [
             ("jql", jql),
-            ("maxResults", &max_results.unwrap_or(50).to_string()),
+            ("startAt", &start_at.to_string()),
+            ("maxResults", &max_results.to_string()),
             ("fields", "summary,description,status,assignee,reporter,created,updated,priority,issuetype,project,comment")
         ];
 
@@ -230,13 +270,23 @@ impl JiraClient {
         #[derive(Deserialize)]
         struct SearchResponse {
             issues: Vec<Issue>,
+            total: u32,
+            #[serde(rename = "startAt")]
+            start_at: u32,
+            #[serde(rename = "maxResults")]
+            max_results: u32,
         }
 
         let search_response: SearchResponse = resp
             .into_json()
             .with_context(|| "Failed to parse Jira search response as JSON")?;
 
-        Ok(search_response.issues)
+        Ok(SearchPage {
+            issues: search_response.issues,
+            total: search_response.total,
+            start_at: search_response.start_at,
+            max_results: search_response.max_results,
+        })
     }
 
     /// Get a Jira filter by ID
