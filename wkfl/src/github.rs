@@ -7,6 +7,7 @@ use crate::gql_queries::review_comments::{
     GraphQLReviewCommentsVariables,
 };
 use anyhow::{anyhow, Context, Result};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
@@ -67,6 +68,7 @@ pub struct GitHubClient {
     api_base: String,
     graphql_base: String,
     token: String,
+    client: Client,
 }
 
 impl GitHubClient {
@@ -87,11 +89,12 @@ impl GitHubClient {
             api_base,
             graphql_base,
             token,
+            client: Client::new(),
         }
     }
 
     /// Make a GET request to the GitHub API
-    fn api_get(&self, path_segments: &[&str]) -> Result<ureq::Response> {
+    async fn api_get(&self, path_segments: &[&str]) -> Result<reqwest::Response> {
         let mut url = Url::parse(&self.api_base)?;
         {
             let mut segments = url
@@ -99,11 +102,15 @@ impl GitHubClient {
                 .map_err(|_| anyhow!("Failed to set URL path segments"))?;
             segments.extend(path_segments);
         }
-        let resp = ureq::get(url.as_str())
-            .set("Authorization", &format!("Bearer {}", &self.token))
-            .set("User-Agent", "wkfl")
-            .set("Accept", "application/vnd.github+json")
-            .call()
+        let resp = self
+            .client
+            .get(url.as_str())
+            .header("Authorization", format!("Bearer {}", &self.token))
+            .header("User-Agent", "wkfl")
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .and_then(|resp| resp.error_for_status())
             .with_context(|| {
                 format!(
                     "Failed to query GitHub API at path: {}",
@@ -114,7 +121,7 @@ impl GitHubClient {
     }
 
     /// List pull requests associated with a specific commit SHA
-    pub fn get_pull_requests_for_commit(
+    pub async fn get_pull_requests_for_commit(
         &self,
         owner: &str,
         repo: &str,
@@ -122,17 +129,24 @@ impl GitHubClient {
     ) -> Result<Vec<PullRequest>> {
         let resp = self
             .api_get(&["repos", owner, repo, "commits", commit_sha, "pulls"])
+            .await
             .with_context(|| format!("Failed to query GitHub API for commit '{commit_sha}'"))?;
         let prs: Vec<PullRequest> = resp
-            .into_json()
+            .json()
+            .await
             .with_context(|| "Failed to parse GitHub PRs response as JSON")?;
         Ok(prs)
     }
 
     /// Get all comments for a pull request
-    pub fn get_pr_comments(&self, owner: &str, repo: &str, pr_number: u64) -> Result<PrComments> {
-        let issue_comments = self.get_issue_comments(owner, repo, pr_number)?;
-        let review_comments = self.get_review_comments(owner, repo, pr_number)?;
+    pub async fn get_pr_comments(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: u64,
+    ) -> Result<PrComments> {
+        let issue_comments = self.get_issue_comments(owner, repo, pr_number).await?;
+        let review_comments = self.get_review_comments(owner, repo, pr_number).await?;
 
         Ok(PrComments {
             issue_comments,
@@ -141,7 +155,7 @@ impl GitHubClient {
     }
 
     /// Get issue/timeline comments for a PR
-    fn get_issue_comments(
+    async fn get_issue_comments(
         &self,
         owner: &str,
         repo: &str,
@@ -156,16 +170,18 @@ impl GitHubClient {
                 &pr_number.to_string(),
                 "comments",
             ])
+            .await
             .with_context(|| format!("Failed to query GitHub API for PR #{pr_number} comments"))?;
 
         let comments: Vec<IssueComment> = resp
-            .into_json()
+            .json()
+            .await
             .with_context(|| "Failed to parse GitHub issue comments response as JSON")?;
         Ok(comments)
     }
 
     /// Get review/diff comments for a PR
-    fn get_review_comments(
+    async fn get_review_comments(
         &self,
         owner: &str,
         repo: &str,
@@ -184,6 +200,7 @@ impl GitHubClient {
 
             let data: GraphQLReviewCommentsData = self
                 .graphql_query(gql_queries::review_comments::QUERY, &variables)
+                .await
                 .with_context(|| {
                     format!(
                         "Failed to query GitHub GraphQL API for PR #{pr_number} review comments"
@@ -222,20 +239,26 @@ impl GitHubClient {
         Ok(all_comments)
     }
 
-    fn graphql_query<T, V>(&self, query: &str, variables: &V) -> Result<T>
+    async fn graphql_query<T, V>(&self, query: &str, variables: &V) -> Result<T>
     where
         T: for<'de> Deserialize<'de>,
         V: ?Sized + Serialize,
     {
-        let response = ureq::post(&self.graphql_base)
-            .set("Authorization", &format!("Bearer {}", &self.token))
-            .set("User-Agent", "wkfl")
-            .set("Accept", "application/vnd.github+json")
-            .send_json(json!({ "query": query, "variables": variables }))
+        let response = self
+            .client
+            .post(&self.graphql_base)
+            .header("Authorization", format!("Bearer {}", &self.token))
+            .header("User-Agent", "wkfl")
+            .header("Accept", "application/vnd.github+json")
+            .json(&json!({ "query": query, "variables": variables }))
+            .send()
+            .await
+            .and_then(|resp| resp.error_for_status())
             .with_context(|| "Failed to execute GitHub GraphQL request")?;
 
         let parsed: gql_queries::GraphQLResponse<T> = response
-            .into_json()
+            .json()
+            .await
             .with_context(|| "Failed to parse GitHub GraphQL response as JSON")?;
 
         if let Some(errors) = parsed.errors {

@@ -83,7 +83,7 @@ pub fn clone_repo(context: &mut Context) -> anyhow::Result<()> {
 }
 
 /// List all local branches and delete those whose pull request has been merged
-pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
+pub async fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
     let remote_url = git::get_default_remote_url(&repo)?;
 
@@ -117,7 +117,10 @@ pub fn prune_merged_branches(config: &Config) -> anyhow::Result<()> {
             .ok_or(anyhow::anyhow!("Branch should point to a commit"))?;
         let sha = oid.to_string();
         // Query GitHub for pull requests associated with this commit
-        let prs = match gh_client.get_pull_requests_for_commit(&owner, &repo_name, &sha) {
+        let prs = match gh_client
+            .get_pull_requests_for_commit(&owner, &repo_name, &sha)
+            .await
+        {
             Ok(prs) => prs,
             Err(e) => {
                 println!("  Failed to query GitHub API: {e}");
@@ -614,7 +617,7 @@ pub fn run_build_commands(_context: &mut Context, list: bool) -> anyhow::Result<
     Ok(())
 }
 
-pub fn get_pull_request_for_commit(
+pub async fn get_pull_request_for_commit(
     commit_sha: Option<String>,
     config: &Config,
 ) -> anyhow::Result<()> {
@@ -630,7 +633,9 @@ pub fn get_pull_request_for_commit(
     let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
 
     let github_client = create_github_client(&remote_url, config)?;
-    let pull_requests = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
+    let pull_requests = github_client
+        .get_pull_requests_for_commit(&owner, &repo_name, &sha)
+        .await?;
 
     if pull_requests.is_empty() {
         println!("No pull request found for commit {sha}");
@@ -648,7 +653,7 @@ pub fn get_pull_request_for_commit(
     Ok(())
 }
 
-pub fn get_pr_comments(
+pub async fn get_pr_comments(
     pr_number: Option<u64>,
     filter_timeline: bool,
     filter_bots: bool,
@@ -665,7 +670,9 @@ pub fn get_pr_comments(
     } else {
         // Find PR for current commit
         let sha = git::get_current_commit_sha(&repo)?;
-        let prs = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
+        let prs = github_client
+            .get_pull_requests_for_commit(&owner, &repo_name, &sha)
+            .await?;
 
         if prs.is_empty() {
             anyhow::bail!("No pull request found for current commit {}", sha);
@@ -674,7 +681,9 @@ pub fn get_pr_comments(
         prs[0].number
     };
 
-    let comments = github_client.get_pr_comments(&owner, &repo_name, pr_num)?;
+    let comments = github_client
+        .get_pr_comments(&owner, &repo_name, pr_num)
+        .await?;
 
     print_comments_markdown(&comments, filter_timeline, filter_bots, filter_diff)?;
 

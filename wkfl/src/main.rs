@@ -322,7 +322,8 @@ fn setup_logging(verbose: bool) {
     log_builder.init();
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     setup_logging(cli.verbose);
 
@@ -335,7 +336,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::Repos { full_path } => actions::list_repositories(context.config, full_path)?,
         Commands::Repo => actions::switch_repo(&mut context)?,
         Commands::Clone => actions::clone_repo(&mut context)?,
-        Commands::PruneBranches => actions::prune_merged_branches(&context.config)?,
+        Commands::PruneBranches => actions::prune_merged_branches(&context.config).await?,
         Commands::Test { list } => actions::run_test_commands(&mut context, list)?,
         Commands::Fmt { list } => actions::run_fmt_commands(&mut context, list)?,
         Commands::Build { list } => actions::run_build_commands(&mut context, list)?,
@@ -417,7 +418,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             command: github_command,
         } => match github_command {
             GithubCommands::GetPr { commit_sha } => {
-                actions::get_pull_request_for_commit(commit_sha, &context.config)?
+                actions::get_pull_request_for_commit(commit_sha, &context.config).await?
             }
             GithubCommands::GetPrComments {
                 pr_number,
@@ -430,7 +431,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 !no_filter_bots,
                 filter_diff,
                 &context.config,
-            )?,
+            )
+            .await?,
         },
         Commands::Todo {
             command: todo_command,
