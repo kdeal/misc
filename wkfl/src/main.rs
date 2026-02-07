@@ -425,14 +425,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 filter_timeline,
                 no_filter_bots,
                 filter_diff,
-            } => actions::get_pr_comments(
-                pr_number,
-                filter_timeline,
-                !no_filter_bots,
-                filter_diff,
-                &context.config,
-            )
-            .await?,
+            } => {
+                actions::get_pr_comments(
+                    pr_number,
+                    filter_timeline,
+                    !no_filter_bots,
+                    filter_diff,
+                    &context.config,
+                )
+                .await?
+            }
         },
         Commands::Todo {
             command: todo_command,
