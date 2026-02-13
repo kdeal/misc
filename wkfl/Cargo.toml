@@ -8,21 +8,21 @@ publish = false
 [dependencies]
 anyhow = { version = "1.0.100", features = ["backtrace"] }
 base64 = "0.22.1"
-clap = { version = "4.5.50", features = ["derive"] }
-clap_complete = "4.5.59"
+clap = { version = "4.5.54", features = ["derive"] }
+clap_complete = "4.5.65"
 crossterm = "0.29.0"
 env_logger = "0.11.6"
 fuzzy-matcher = "0.3.7"
 git2 = "0.20.0"
 home = "0.5.12"
-log = "0.4.28"
+log = "0.4.29"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
+serde_json = "1.0.149"
 time = { version = "0.3.47", features = ["formatting", "macros", "parsing"] }
-toml = "0.9.8"
+toml = "0.9.11"
 ureq = { version = "2.12.1", features = ["json", "gzip"] }
 url = "2.5.2"
 
 [dev-dependencies]
-tempfile = "3.23.0"
+tempfile = "3.24.0"
