@@ -13,6 +13,3 @@ Container image for running the Ubiquiti UniFi Network Controller on demand.
 
 ## wkfl
 Rust command-line tool that streamlines and automates pieces of a personal workflow.
-
-## wkfl-app
-Tauri desktop application scaffold that complements the wkfl tooling with a GUI experiment.
