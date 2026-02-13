@@ -7,9 +7,11 @@ use crate::gql_queries::review_comments::{
     GraphQLReviewCommentsVariables,
 };
 use anyhow::{anyhow, Context, Result};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::time::Duration;
 use url::Url;
 /// A GitHub pull request minimal representation
 #[derive(Debug, Deserialize)]
@@ -67,13 +69,12 @@ pub struct PrComments {
 pub struct GitHubClient {
     api_base: String,
     graphql_base: String,
-    token: String,
     client: Client,
 }
 
 impl GitHubClient {
     /// Create a new GitHub client
-    pub fn new(host: String, token: String) -> Self {
+    pub fn new(host: String, token: String) -> Result<Self> {
         let (api_base, graphql_base) = if host == "github.com" {
             (
                 "https://api.github.com".to_string(),
@@ -85,12 +86,28 @@ impl GitHubClient {
                 format!("https://{host}/api/graphql"),
             )
         };
-        GitHubClient {
+
+        let mut default_headers = HeaderMap::new();
+        default_headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {token}"))?,
+        );
+        default_headers.insert(USER_AGENT, HeaderValue::from_static("wkfl"));
+        default_headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/vnd.github+json"),
+        );
+        let client = Client::builder()
+            .default_headers(default_headers)
+            .timeout(Duration::from_secs(30))
+            .build()
+            .with_context(|| "Failed to build GitHub HTTP client")?;
+
+        Ok(GitHubClient {
             api_base,
             graphql_base,
-            token,
-            client: Client::new(),
-        }
+            client,
+        })
     }
 
     /// Make a GET request to the GitHub API
@@ -105,9 +122,6 @@ impl GitHubClient {
         let resp = self
             .client
             .get(url.as_str())
-            .header("Authorization", format!("Bearer {}", &self.token))
-            .header("User-Agent", "wkfl")
-            .header("Accept", "application/vnd.github+json")
             .send()
             .await
             .and_then(|resp| resp.error_for_status())
@@ -145,8 +159,10 @@ impl GitHubClient {
         repo: &str,
         pr_number: u64,
     ) -> Result<PrComments> {
-        let issue_comments = self.get_issue_comments(owner, repo, pr_number).await?;
-        let review_comments = self.get_review_comments(owner, repo, pr_number).await?;
+        let (issue_comments, review_comments) = tokio::try_join!(
+            self.get_issue_comments(owner, repo, pr_number),
+            self.get_review_comments(owner, repo, pr_number)
+        )?;
 
         Ok(PrComments {
             issue_comments,
@@ -247,9 +263,6 @@ impl GitHubClient {
         let response = self
             .client
             .post(&self.graphql_base)
-            .header("Authorization", format!("Bearer {}", &self.token))
-            .header("User-Agent", "wkfl")
-            .header("Accept", "application/vnd.github+json")
             .json(&json!({ "query": query, "variables": variables }))
             .send()
             .await
@@ -327,7 +340,7 @@ pub fn create_github_client(remote_url: &str, config: &Config) -> anyhow::Result
     let github_token = resolve_secret(github_token_raw)
         .with_context(|| format!("Failed to resolve GitHub token for host '{host}'"))?;
 
-    Ok(GitHubClient::new(host, github_token))
+    GitHubClient::new(host, github_token)
 }
 
 pub fn is_bot_user(user_login: &str, user_type: &str) -> bool {
