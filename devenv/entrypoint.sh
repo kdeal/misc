@@ -9,6 +9,8 @@ chown "$SSH_USER:$SSH_USER" "/home/$SSH_USER/.ssh/"
 echo "$SSH_PUB_KEY" > "/home/$SSH_USER/.ssh/authorized_keys"
 
 mv $RUSTUP_HOME "/home/$SSH_USER/.rustup"
+chown -R "$SSH_USER:$SSH_USER" "/home/$SSH_USER/.rustup"
+chmod -R og-wx "/home/$SSH_USER/.rustup"
 
 # Setup ssh server
 # Copy host keys into config dir
