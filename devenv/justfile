@@ -1,0 +1,34 @@
+default: up
+
+SCRATCH_DIR := "scratch"
+SSH_KEY := SCRATCH_DIR / "ssh_key"
+ENV_FILE := SCRATCH_DIR / "test.env"
+IMAGE := "devenv"
+CONTAINER := "devenv"
+SSH_PORT := "5522"
+
+scratch-dir:
+    mkdir -p "{{SCRATCH_DIR}}"
+
+ssh-key: scratch-dir
+    if [ ! -f "{{SSH_KEY}}" ]; then \
+        ssh-keygen -t ed25519 -N "" -C "devenv@local" -f "{{SSH_KEY}}"; \
+    fi
+
+env: ssh-key
+    SSH_USER_ID="$(id -u)"; \
+    SSH_GROUP_ID="$(id -g)"; \
+    SSH_USER="$(id -un)"; \
+    SSH_PUB_KEY="$(cat "{{SSH_KEY}}.pub")"; \
+    printf "SSH_GROUP_ID=%s\nSSH_USER=%s\nSSH_USER_ID=%s\nSSH_PUB_KEY=%s\n" \
+        "$SSH_GROUP_ID" "$SSH_USER" "$SSH_USER_ID" "$SSH_PUB_KEY" > "{{ENV_FILE}}"
+
+build:
+    docker build -t "{{IMAGE}}" .
+
+up: env build
+    docker rm -f "{{CONTAINER}}" >/dev/null 2>&1 || true
+    docker run -d --name "{{CONTAINER}}" -p "{{SSH_PORT}}:22" --env-file "{{ENV_FILE}}" "{{IMAGE}}"
+
+ssh: ssh-key
+    ssh -i "{{SSH_KEY}}" -p "{{SSH_PORT}}" "$(id -un)"@localhost
