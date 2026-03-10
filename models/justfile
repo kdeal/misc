@@ -1,0 +1,19 @@
+stl scad_file:
+    #!/bin/sh
+    set -eu
+    scad_file="{{scad_file}}"
+    output_file="${scad_file%.scad}.stl"
+    docker run --rm \
+      -v "{{invocation_directory()}}:/openscad" \
+      -w /openscad \
+      -u "$(id -u):$(id -g)" \
+      openscad/openscad:trixie \
+      openscad -o "$output_file" "$scad_file"
+
+all-stl:
+    #!/bin/sh
+    set -eu
+    for file in "{{invocation_directory()}}"/*.scad; do
+      echo "Generating stl for $file"
+      just stl "$(basename "$file")"
+    done
