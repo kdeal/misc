@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -83,7 +84,7 @@ func accumulateBlock(blockDir string, aggregate map[string]*MetricStat) error {
 	indexPath := filepath.Join(blockDir, "index")
 	chunkDir := filepath.Join(blockDir, "chunks")
 
-	indexReader, err := index.NewFileReader(indexPath)
+	indexReader, err := index.NewFileReader(indexPath, index.DecodePostingsRaw)
 	if err != nil {
 		return fmt.Errorf("open index: %w", err)
 	}
@@ -97,20 +98,21 @@ func accumulateBlock(blockDir string, aggregate map[string]*MetricStat) error {
 	defer chunkReader.Close()
 
 	name, value := index.AllPostingsKey()
-	postings, err := indexReader.Postings(name, value)
+	postings, err := indexReader.Postings(context.Background(), name, value)
 	if err != nil {
 		return fmt.Errorf("load postings: %w", err)
 	}
 
 	for postings.Next() {
 		ref := postings.At()
-		var lset labels.Labels
+		var builder labels.ScratchBuilder
 		var metas []chunks.Meta
 
-		if err := indexReader.Series(ref, &lset, &metas); err != nil {
+		if err := indexReader.Series(ref, &builder, &metas); err != nil {
 			return fmt.Errorf("read series %d: %w", ref, err)
 		}
 
+		lset := builder.Labels()
 		metricName := lset.Get("__name__")
 		if metricName == "" {
 			metricName = "(no_metric_name)"
@@ -118,7 +120,7 @@ func accumulateBlock(blockDir string, aggregate map[string]*MetricStat) error {
 
 		var seriesBytes int64
 		for _, meta := range metas {
-			chk, err := chunkReader.Chunk(meta.Ref)
+			chk, _, err := chunkReader.ChunkOrIterable(meta)
 			if err != nil {
 				if strings.Contains(err.Error(), "reference") {
 					return fmt.Errorf("chunk %d: %w", meta.Ref, err)

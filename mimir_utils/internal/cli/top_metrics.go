@@ -3,7 +3,6 @@ package cli
 import (
 	"flag"
 	"fmt"
-	"math"
 	"os"
 	"text/tabwriter"
 
