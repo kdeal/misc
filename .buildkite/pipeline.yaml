@@ -1,0 +1,12 @@
+steps:
+  - label: ":bricks: :white_check_mark: Linters for models project"
+    key: "models_lint"
+    command: |
+      apt update
+      apt install just
+      cd models/
+      just check-stl
+    if_changed: "models/**"
+    plugins:
+      - docker#v5.13.0:
+          image: "debian:trixie"

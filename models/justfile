@@ -17,3 +17,19 @@ all-stl:
       echo "Generating stl for $file"
       just stl "$(basename "$file")"
     done
+
+check-stl:
+    #!/bin/sh
+    set -eu
+    missing=0
+    for file in "{{invocation_directory()}}"/*.scad; do
+      stl_file="${file%.scad}.stl"
+      if [ ! -f "$stl_file" ]; then
+        echo "Missing STL for $(basename "$file")"
+        missing=1
+      fi
+    done
+    if [ "$missing" -ne 0 ]; then
+      exit 1
+    fi
+    echo "All SCAD files have matching STL files"
