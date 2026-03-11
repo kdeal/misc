@@ -3,7 +3,7 @@ steps:
     key: "models_lint"
     command: |
       apt update
-      apt install just
+      apt install --yes just
       cd models/
       just check-stl
     if_changed: "models/**"
