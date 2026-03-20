@@ -65,9 +65,23 @@ pub fn get_repositories_in_directory(directory: &Path) -> anyhow::Result<Vec<Pat
     Ok(repositories)
 }
 
+pub fn get_repository_names_in_directory(directory: &Path) -> anyhow::Result<Vec<String>> {
+    let mut repositories = get_repositories_in_directory(directory)?
+        .into_iter()
+        .map(|repo_path| {
+            repo_path
+                .strip_prefix(directory)
+                .map(|relative_path| relative_path.display().to_string())
+                .map_err(anyhow::Error::from)
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    repositories.sort();
+    Ok(repositories)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::is_dir_a_repo;
+    use super::{get_repository_names_in_directory, is_dir_a_repo};
     use std::fs;
     use tempfile::tempdir;
 
@@ -94,5 +108,17 @@ mod tests {
     #[test]
     fn returns_false_for_directories_without_vcs_metadata() {
         assert_repo_detection(None, false);
+    }
+
+    #[test]
+    fn returns_sorted_relative_repository_names() {
+        let temp_dir = tempdir().expect("failed to create temp directory");
+        fs::create_dir_all(temp_dir.path().join("zebra/.git")).expect("failed to create git repo");
+        fs::create_dir_all(temp_dir.path().join("apps/api/.jj")).expect("failed to create jj repo");
+
+        let repositories = get_repository_names_in_directory(temp_dir.path())
+            .expect("failed to list repositories");
+
+        assert_eq!(repositories, vec!["apps/api", "zebra"]);
     }
 }

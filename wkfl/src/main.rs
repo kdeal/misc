@@ -16,6 +16,7 @@ mod llm;
 mod notes;
 mod prompts;
 mod repositories;
+mod server;
 mod shell_actions;
 mod todo;
 mod utils;
@@ -44,6 +45,8 @@ enum Commands {
         #[arg(short, long)]
         full_path: bool,
     },
+    /// Serve repository information over HTTP.
+    Serve,
     /// Select a repository and switch to it.
     Repo,
     /// Print the currently resolved wkfl configuration.
@@ -322,7 +325,8 @@ fn setup_logging(verbose: bool) {
     log_builder.init();
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     setup_logging(cli.verbose);
 
@@ -332,7 +336,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     match cli.command {
         Commands::RepoDebug => actions::print_repo_debug_info()?,
-        Commands::Repos { full_path } => actions::list_repositories(context.config, full_path)?,
+        Commands::Repos { full_path } => {
+            actions::list_repositories(context.config, full_path).await?
+        }
+        Commands::Serve => actions::serve_repositories(context.config).await?,
         Commands::Repo => actions::switch_repo(&mut context)?,
         Commands::Clone => actions::clone_repo(&mut context)?,
         Commands::PruneBranches => actions::prune_merged_branches(&context.config)?,

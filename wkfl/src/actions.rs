@@ -25,23 +25,30 @@ use crate::prompts::basic_prompt;
 use crate::prompts::boolean_prompt;
 use crate::prompts::select_prompt;
 use crate::prompts::Link;
-use crate::repositories::get_repositories_in_directory;
+use crate::repositories::{get_repositories_in_directory, get_repository_names_in_directory};
+use crate::server;
 use crate::shell_actions::ShellAction;
 use crate::utils;
 use crate::Context;
 
-pub fn list_repositories(config: Config, full_path: bool) -> anyhow::Result<()> {
+pub async fn list_repositories(config: Config, full_path: bool) -> anyhow::Result<()> {
     let base_repo_path = config.repositories_directory_path()?;
-    let repo_paths = get_repositories_in_directory(&base_repo_path)?;
-    for repo_path in repo_paths {
-        if full_path {
+    if full_path {
+        let repo_paths = get_repositories_in_directory(&base_repo_path)?;
+        for repo_path in repo_paths {
             println!("{}", repo_path.display())
-        } else {
-            let relative_repo_path = repo_path.strip_prefix(&base_repo_path)?;
-            println!("{}", relative_repo_path.display())
+        }
+    } else {
+        for repository in get_repository_names_in_directory(&base_repo_path)? {
+            println!("{repository}")
         }
     }
     Ok(())
+}
+
+pub async fn serve_repositories(config: Config) -> anyhow::Result<()> {
+    let base_repo_path = config.repositories_directory_path()?;
+    server::serve(base_repo_path).await
 }
 
 pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
