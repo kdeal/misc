@@ -71,10 +71,6 @@ pub fn clone_repo(context: &mut Context) -> anyhow::Result<()> {
     let repo_path = context.config.repositories_directory_path()?.join(repo);
     fs::create_dir_all(&repo_path)?;
 
-    let use_worktrees = boolean_prompt("Use worktrees?", false)?;
-    if use_worktrees {
-        anyhow::bail!("Cloning and using worktrees is unsupported");
-    }
     git::clone_repo(&repo_url, &repo_path)?;
     context
         .shell_actions
