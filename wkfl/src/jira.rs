@@ -2,13 +2,13 @@ use crate::config::resolve_secret;
 use crate::config::Config;
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose, Engine as _};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub mod adf;
 
 /// A Jira issue minimal representation
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Issue {
     #[allow(dead_code)]
     pub id: String,
@@ -17,7 +17,7 @@ pub struct Issue {
 }
 
 /// Jira issue fields
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct IssueFields {
     pub summary: String,
     pub description: Option<adf::Document>,
@@ -32,12 +32,12 @@ pub struct IssueFields {
     pub comment: CommentBlock,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct CommentBlock {
     pub comments: Vec<Comment>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Project {
     #[allow(dead_code)]
     pub id: String,
@@ -46,20 +46,20 @@ pub struct Project {
 }
 
 /// A Jira user
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct User {
-    #[serde(rename = "accountId")]
+    #[serde(rename = "accountId", skip_serializing)]
     #[allow(dead_code)]
     pub account_id: String,
     #[serde(rename = "displayName")]
     pub display_name: String,
-    #[serde(rename = "emailAddress")]
+    #[serde(rename = "emailAddress", skip_serializing)]
     #[allow(dead_code)]
     pub email_address: Option<String>,
 }
 
 /// Jira issue status
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Status {
     #[allow(dead_code)]
     pub id: String,
@@ -70,7 +70,7 @@ pub struct Status {
 }
 
 /// Jira status category
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct StatusCategory {
     #[allow(dead_code)]
     pub key: String,
@@ -79,7 +79,7 @@ pub struct StatusCategory {
 }
 
 /// Jira issue priority
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Priority {
     #[allow(dead_code)]
     pub id: String,
@@ -87,7 +87,7 @@ pub struct Priority {
 }
 
 /// Jira issue type
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct IssueType {
     #[allow(dead_code)]
     pub id: String,
@@ -97,7 +97,7 @@ pub struct IssueType {
 }
 
 /// A Jira comment
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Comment {
     #[allow(dead_code)]
     pub id: String,
@@ -112,7 +112,7 @@ pub struct Comment {
 ///
 /// Filters in Jira are saved JQL queries that can be reused to search for issues.
 /// They can be marked as favourites and shared with other users.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Filter {
     /// Unique identifier for the filter
     pub id: String,
@@ -341,6 +341,25 @@ pub fn format_jira_date(date_str: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_user_deserializes_but_does_not_serialize_pii() {
+        let user: User = serde_json::from_value(serde_json::json!({
+            "accountId": "user123",
+            "displayName": "Test User",
+            "emailAddress": "test@example.com"
+        }))
+        .unwrap();
+
+        assert_eq!(user.account_id, "user123");
+        assert_eq!(user.email_address.as_deref(), Some("test@example.com"));
+
+        let serialized = serde_json::to_value(&user).unwrap();
+
+        assert_eq!(serialized["displayName"], "Test User");
+        assert!(serialized.get("accountId").is_none());
+        assert!(serialized.get("emailAddress").is_none());
+    }
 
     #[test]
     fn test_format_jira_date_with_timezone_plus() {
