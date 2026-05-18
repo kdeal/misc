@@ -613,6 +613,7 @@ pub fn run_build_commands(_context: &mut Context, list: bool) -> anyhow::Result<
 
 pub fn get_pull_request_for_commit(
     commit_sha: Option<String>,
+    json: bool,
     config: &Config,
 ) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
@@ -628,6 +629,10 @@ pub fn get_pull_request_for_commit(
 
     let github_client = create_github_client(&remote_url, config)?;
     let pull_requests = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
+
+    if json {
+        return print_json(&pull_requests);
+    }
 
     if pull_requests.is_empty() {
         println!("No pull request found for commit {sha}");
@@ -650,6 +655,7 @@ pub fn get_pr_comments(
     filter_timeline: bool,
     filter_bots: bool,
     filter_diff: bool,
+    json: bool,
     config: &Config,
 ) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
@@ -673,9 +679,62 @@ pub fn get_pr_comments(
 
     let comments = github_client.get_pr_comments(&owner, &repo_name, pr_num)?;
 
+    if json {
+        return print_comments_json(&comments, filter_timeline, filter_bots, filter_diff);
+    }
+
     print_comments_markdown(&comments, filter_timeline, filter_bots, filter_diff)?;
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct PrCommentsOutput<'a> {
+    issue_comments: Vec<&'a IssueComment>,
+    review_comments: Vec<&'a ReviewComment>,
+}
+
+fn filtered_comments<'a>(
+    comments: &'a PrComments,
+    filter_timeline: bool,
+    filter_bots: bool,
+    filter_diff: bool,
+) -> PrCommentsOutput<'a> {
+    let mut issue_comments = if filter_timeline {
+        Vec::new()
+    } else {
+        comments.issue_comments.iter().collect()
+    };
+
+    let mut review_comments = if filter_diff {
+        Vec::new()
+    } else {
+        comments.review_comments.iter().collect()
+    };
+
+    if filter_bots {
+        issue_comments.retain(|c| !is_bot_user(&c.user.login, &c.user.user_type));
+        review_comments.retain(|c| !is_bot_user(&c.user.login, &c.user.user_type));
+    }
+
+    PrCommentsOutput {
+        issue_comments,
+        review_comments,
+    }
+}
+
+fn print_comments_json(
+    comments: &PrComments,
+    filter_timeline: bool,
+    filter_bots: bool,
+    filter_diff: bool,
+) -> anyhow::Result<()> {
+    print_json(&filtered_comments(
+        comments,
+        filter_timeline,
+        filter_bots,
+        filter_diff,
+    ))
 }
 
 fn format_context_lines(diff_lines: &[&git::DiffLine]) -> String {

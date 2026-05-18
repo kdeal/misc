@@ -171,6 +171,9 @@ enum GithubCommands {
         /// Commit SHA to inspect (defaults to the current HEAD).
         #[arg(value_hint = ValueHint::Other)]
         commit_sha: Option<String>,
+        /// Output matching pull requests as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Print comments for a pull request.
     #[command(name = "get_pr_comments")]
@@ -187,6 +190,9 @@ enum GithubCommands {
         /// Exclude diff review comments from the output.
         #[arg(long)]
         filter_diff: bool,
+        /// Output matching comments as JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -425,19 +431,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::Github {
             command: github_command,
         } => match github_command {
-            GithubCommands::GetPr { commit_sha } => {
-                actions::get_pull_request_for_commit(commit_sha, &context.config)?
+            GithubCommands::GetPr { commit_sha, json } => {
+                actions::get_pull_request_for_commit(commit_sha, json, &context.config)?
             }
             GithubCommands::GetPrComments {
                 pr_number,
                 filter_timeline,
                 no_filter_bots,
                 filter_diff,
+                json,
             } => actions::get_pr_comments(
                 pr_number,
                 filter_timeline,
                 !no_filter_bots,
                 filter_diff,
+                json,
                 &context.config,
             )?,
         },
