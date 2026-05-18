@@ -282,6 +282,9 @@ enum JiraCommands {
         /// Issue key to fetch (for example, PROJ-123).
         #[arg(value_hint = ValueHint::Other)]
         issue_key: String,
+        /// Output the issue as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Search Jira issues using a JQL query.
     Search {
@@ -291,6 +294,9 @@ enum JiraCommands {
         /// Maximum number of results to return.
         #[arg(short, long)]
         max_results: Option<u32>,
+        /// Output matching issues as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Search Jira issues using a saved filter.
     Filter {
@@ -300,6 +306,9 @@ enum JiraCommands {
         /// Maximum number of results to return.
         #[arg(short, long)]
         max_results: Option<u32>,
+        /// Output the filter and matching issues as JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -454,16 +463,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::Jira {
             command: jira_command,
         } => match jira_command {
-            JiraCommands::Get { issue_key } => {
-                actions::get_jira_issue(&issue_key, &context.config)?
+            JiraCommands::Get { issue_key, json } => {
+                actions::get_jira_issue(&issue_key, json, &context.config)?
             }
-            JiraCommands::Search { jql, max_results } => {
-                actions::search_jira_issues(&jql, max_results, &context.config)?
-            }
+            JiraCommands::Search {
+                jql,
+                max_results,
+                json,
+            } => actions::search_jira_issues(&jql, max_results, json, &context.config)?,
             JiraCommands::Filter {
                 filter_id,
                 max_results,
-            } => actions::search_jira_issues_by_filter(filter_id, max_results, &context.config)?,
+                json,
+            } => actions::search_jira_issues_by_filter(
+                filter_id,
+                max_results,
+                json,
+                &context.config,
+            )?,
         },
     };
 

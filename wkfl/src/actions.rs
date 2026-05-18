@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use log::info;
+use serde::Serialize;
 use std::fs;
 use std::io;
 use std::io::Write;
@@ -856,9 +857,18 @@ fn print_comments_markdown(
     Ok(())
 }
 
-pub fn get_jira_issue(issue_key: &str, config: &Config) -> anyhow::Result<()> {
+fn print_json<T: Serialize>(value: &T) -> anyhow::Result<()> {
+    println!("{}", serde_json::to_string_pretty(value)?);
+    Ok(())
+}
+
+pub fn get_jira_issue(issue_key: &str, json: bool, config: &Config) -> anyhow::Result<()> {
     let client = create_jira_client(config)?;
     let issue = client.get_issue(issue_key)?;
+
+    if json {
+        return print_json(&issue);
+    }
 
     println!("Issue: {}", issue.key);
     println!("Summary: {}", issue.fields.summary);
@@ -949,18 +959,35 @@ fn display_jira_issues(issues: &[crate::jira::Issue]) {
 pub fn search_jira_issues(
     jql: &str,
     max_results: Option<u32>,
+    json: bool,
     config: &Config,
 ) -> anyhow::Result<()> {
     let client = create_jira_client(config)?;
     let issues = client.search_issues(jql, max_results)?;
 
+    if json {
+        return print_json(&issues);
+    }
+
     display_jira_issues(&issues);
     Ok(())
+}
+
+#[derive(Serialize)]
+struct JiraFilterSearchOutput<'a> {
+    filter: &'a crate::jira::Filter,
+    issues: &'a [crate::jira::Issue],
+}
+
+#[derive(Serialize)]
+struct JiraFilterSearchError<'a> {
+    error: &'a str,
 }
 
 pub fn search_jira_issues_by_filter(
     filter_id: Option<String>,
     max_results: Option<u32>,
+    json: bool,
     config: &Config,
 ) -> anyhow::Result<()> {
     let client = create_jira_client(config)?;
@@ -977,9 +1004,13 @@ pub fn search_jira_issues_by_filter(
             let filters = client.get_favourite_filters()?;
 
             if filters.is_empty() {
-                println!(
-                    "No favourite filters found. You can add filters to your favourites in Jira."
-                );
+                let message =
+                    "No favourite filters found. You can add filters to your favourites in Jira.";
+                if json {
+                    return print_json(&JiraFilterSearchError { error: message });
+                }
+
+                println!("{}", message);
                 return Ok(());
             }
 
@@ -1001,11 +1032,19 @@ pub fn search_jira_issues_by_filter(
         "Executing search with filter: {} (ID: {})",
         filter.name, filter.id
     );
+    // Search for issues using the filter's JQL
+    let issues = client.search_issues(&filter.jql, max_results)?;
+
+    if json {
+        return print_json(&JiraFilterSearchOutput {
+            filter: &filter,
+            issues: &issues,
+        });
+    }
+
     println!("Using filter: {} ({})", filter.name, filter.jql);
     println!();
 
-    // Search for issues using the filter's JQL
-    let issues = client.search_issues(&filter.jql, max_results)?;
     display_jira_issues(&issues);
     Ok(())
 }
