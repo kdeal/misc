@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 /// A GitHub pull request minimal representation
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequest {
     pub number: u64,
     #[serde(default)]
@@ -21,7 +21,7 @@ pub struct PullRequest {
 }
 
 /// A GitHub user
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct User {
     pub login: String,
     #[serde(rename = "type")]
@@ -29,7 +29,7 @@ pub struct User {
 }
 
 /// A GitHub issue/PR comment (timeline comment)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct IssueComment {
     pub body: String,
     pub user: User,
@@ -37,7 +37,7 @@ pub struct IssueComment {
 }
 
 /// A GitHub pull request review comment (diff comment)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ReviewComment {
     pub body: String,
     pub user: User,
@@ -56,7 +56,7 @@ pub struct ReviewComment {
 }
 
 /// Container for all PR comment types
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct PrComments {
     pub issue_comments: Vec<IssueComment>,
     pub review_comments: Vec<ReviewComment>,
