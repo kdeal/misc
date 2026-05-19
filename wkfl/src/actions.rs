@@ -31,20 +31,43 @@ use crate::shell_actions::ShellAction;
 use crate::utils;
 use crate::Context;
 
-pub fn list_repositories(config: Config, full_path: bool) -> anyhow::Result<()> {
-    let base_repo_path = config.repositories_directory_path()?;
-    let repo_paths = get_repositories_in_directory(&base_repo_path)?;
-    for repo_path in repo_paths {
-        if full_path {
-            println!("{}", repo_path.display())
-        } else {
-            let relative_repo_path = repo_path.strip_prefix(&base_repo_path)?;
-            println!("{}", relative_repo_path.display())
-        }
-    }
-    Ok(())
+#[derive(Serialize)]
+struct RepositoriesOutput {
+    base_directory: String,
+    repos: Vec<String>,
 }
 
+pub fn list_repositories(config: Config, full_path: bool, json: bool) -> anyhow::Result<()> {
+    let base_repo_path = config.repositories_directory_path()?;
+    let repo_paths = get_repositories_in_directory(&base_repo_path)?;
+
+    let repos: Vec<String> = repo_paths
+        .iter()
+        .map(|repo_path| {
+            if full_path {
+                Ok(repo_path.display().to_string())
+            } else {
+                Ok(repo_path
+                    .strip_prefix(&base_repo_path)?
+                    .display()
+                    .to_string())
+            }
+        })
+        .collect::<anyhow::Result<_>>()?;
+
+    if json {
+        return print_json(&RepositoriesOutput {
+            base_directory: base_repo_path.display().to_string(),
+            repos,
+        });
+    }
+
+    for repo in repos {
+        println!("{}", repo)
+    }
+
+    Ok(())
+}
 pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
     let base_repo_path = context.config.repositories_directory_path()?;
     let repo_paths = get_repositories_in_directory(&base_repo_path)?;
