@@ -207,6 +207,18 @@ enum GithubCommands {
         #[arg(long)]
         json: bool,
     },
+    /// List notifications for the authenticated user.
+    Notifications {
+        /// Only show notifications updated after this ISO 8601 timestamp.
+        #[arg(long, value_hint = ValueHint::Other)]
+        since: Option<String>,
+        /// Include read notifications in addition to unread notifications.
+        #[arg(long, default_value_t = true, num_args = 0..=1, default_missing_value = "true")]
+        all: bool,
+        /// Output matching notifications as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -467,6 +479,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 filter_timeline,
                 !no_filter_bots,
                 filter_diff,
+                json,
+                hostname.as_deref(),
+                &context.config,
+            )?,
+            GithubCommands::Notifications { since, all, json } => actions::get_notifications(
+                since.as_deref(),
+                all,
                 json,
                 hostname.as_deref(),
                 &context.config,

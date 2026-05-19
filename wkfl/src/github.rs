@@ -81,6 +81,37 @@ pub struct PrToReview {
     pub updated_at: String,
 }
 
+/// A GitHub notification subject.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct NotificationSubject {
+    pub title: String,
+    pub url: Option<String>,
+    pub latest_comment_url: Option<String>,
+    #[serde(rename = "type")]
+    pub subject_type: String,
+}
+
+/// A GitHub notification repository.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct NotificationRepository {
+    pub full_name: String,
+    pub html_url: String,
+}
+
+/// A GitHub notification for the authenticated user.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Notification {
+    pub id: String,
+    pub unread: bool,
+    pub reason: String,
+    pub updated_at: String,
+    pub last_read_at: Option<String>,
+    pub subject: NotificationSubject,
+    pub repository: NotificationRepository,
+    pub url: String,
+    pub subscription_url: String,
+}
+
 /// Client for interacting with the GitHub API
 pub struct GitHubClient {
     api_base: String,
@@ -111,12 +142,27 @@ impl GitHubClient {
 
     /// Make a GET request to the GitHub API
     fn api_get(&self, path_segments: &[&str]) -> Result<ureq::Response> {
+        self.api_get_with_query(path_segments, &[])
+    }
+
+    /// Make a GET request to the GitHub API with query parameters.
+    fn api_get_with_query(
+        &self,
+        path_segments: &[&str],
+        query_pairs: &[(&str, String)],
+    ) -> Result<ureq::Response> {
         let mut url = Url::parse(&self.api_base)?;
         {
             let mut segments = url
                 .path_segments_mut()
                 .map_err(|_| anyhow!("Failed to set URL path segments"))?;
             segments.extend(path_segments);
+        }
+        if !query_pairs.is_empty() {
+            let mut query = url.query_pairs_mut();
+            for (key, value) in query_pairs {
+                query.append_pair(key, value);
+            }
         }
         let resp = ureq::get(url.as_str())
             .set("Authorization", &format!("Bearer {}", &self.token))
@@ -130,6 +176,39 @@ impl GitHubClient {
                 )
             })?;
         Ok(resp)
+    }
+
+    /// List notifications for the authenticated user.
+    pub fn get_notifications(&self, since: Option<&str>, all: bool) -> Result<Vec<Notification>> {
+        let mut notifications = Vec::new();
+        let mut page = 1;
+
+        loop {
+            let mut query_pairs = vec![
+                ("all", all.to_string()),
+                ("per_page", "100".to_string()),
+                ("page", page.to_string()),
+            ];
+            if let Some(since) = since {
+                query_pairs.push(("since", since.to_string()));
+            }
+
+            let resp = self
+                .api_get_with_query(&["notifications"], &query_pairs)
+                .with_context(|| "Failed to query GitHub API for notifications")?;
+            let has_next_page = link_header_has_next(resp.header("link"));
+            let page_notifications: Vec<Notification> = resp
+                .into_json()
+                .with_context(|| "Failed to parse GitHub notifications response as JSON")?;
+            notifications.extend(page_notifications);
+
+            if !has_next_page {
+                break;
+            }
+            page += 1;
+        }
+
+        Ok(notifications)
     }
 
     /// List pull requests associated with a specific commit SHA
@@ -302,6 +381,16 @@ impl GitHubClient {
             .data
             .ok_or_else(|| anyhow!("GitHub GraphQL response missing data"))
     }
+}
+
+fn link_header_has_next(link_header: Option<&str>) -> bool {
+    link_header
+        .map(|header| {
+            header
+                .split(',')
+                .any(|link| link.split(';').any(|part| part.trim() == "rel=\"next\""))
+        })
+        .unwrap_or(false)
 }
 
 impl From<GraphQLReviewCommentNode> for ReviewComment {
