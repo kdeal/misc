@@ -766,6 +766,30 @@ pub fn get_notifications(
     Ok(())
 }
 
+pub fn mark_notification_thread_read(
+    thread_id: &str,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let github_client = github_client_for_hostname_or_current_repo(hostname, config)?;
+    github_client.mark_notification_thread_read(thread_id)?;
+    println!("Marked GitHub notification thread {thread_id} as read");
+
+    Ok(())
+}
+
+pub fn mark_notification_thread_done(
+    thread_id: &str,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let github_client = github_client_for_hostname_or_current_repo(hostname, config)?;
+    github_client.mark_notification_thread_done(thread_id)?;
+    println!("Marked GitHub notification thread {thread_id} as done");
+
+    Ok(())
+}
+
 fn github_client_for_remote(
     remote_url: &str,
     hostname: Option<&str>,
@@ -814,6 +838,7 @@ fn print_notification(notification: &Notification) {
         "{} [{}] {}",
         notification.repository.full_name, status, notification.subject.title
     );
+    println!("Thread ID: {}", notification.id);
     println!(
         "Reason: {} ({})",
         notification.reason, notification.subject.subject_type

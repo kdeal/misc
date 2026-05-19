@@ -213,11 +213,25 @@ enum GithubCommands {
         #[arg(long, value_hint = ValueHint::Other)]
         since: Option<String>,
         /// Include read notifications in addition to unread notifications.
-        #[arg(long, default_value_t = true, num_args = 0..=1, default_missing_value = "true")]
+        #[arg(long)]
         all: bool,
         /// Output matching notifications as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Mark a notification thread as read.
+    #[command(name = "mark_thread_read")]
+    MarkThreadRead {
+        /// Notification thread ID from `github notifications`.
+        #[arg(value_hint = ValueHint::Other)]
+        thread_id: String,
+    },
+    /// Mark a notification thread as done.
+    #[command(name = "mark_thread_done")]
+    MarkThreadDone {
+        /// Notification thread ID from `github notifications`.
+        #[arg(value_hint = ValueHint::Other)]
+        thread_id: String,
     },
 }
 
@@ -487,6 +501,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                 since.as_deref(),
                 all,
                 json,
+                hostname.as_deref(),
+                &context.config,
+            )?,
+            GithubCommands::MarkThreadRead { thread_id } => actions::mark_notification_thread_read(
+                &thread_id,
+                hostname.as_deref(),
+                &context.config,
+            )?,
+            GithubCommands::MarkThreadDone { thread_id } => actions::mark_notification_thread_done(
+                &thread_id,
                 hostname.as_deref(),
                 &context.config,
             )?,

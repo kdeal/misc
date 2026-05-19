@@ -140,17 +140,19 @@ impl GitHubClient {
         }
     }
 
+    fn set_headers(&self, request: ureq::Request) -> ureq::Request {
+        request
+            .set("Authorization", &format!("Bearer {}", &self.token))
+            .set("User-Agent", "wkfl")
+            .set("Accept", "application/vnd.github+json")
+    }
+
     /// Make a GET request to the GitHub API
     fn api_get(&self, path_segments: &[&str]) -> Result<ureq::Response> {
         self.api_get_with_query(path_segments, &[])
     }
 
-    /// Make a GET request to the GitHub API with query parameters.
-    fn api_get_with_query(
-        &self,
-        path_segments: &[&str],
-        query_pairs: &[(&str, String)],
-    ) -> Result<ureq::Response> {
+    fn api_url(&self, path_segments: &[&str], query_pairs: &[(&str, String)]) -> Result<Url> {
         let mut url = Url::parse(&self.api_base)?;
         {
             let mut segments = url
@@ -164,14 +166,53 @@ impl GitHubClient {
                 query.append_pair(key, value);
             }
         }
-        let resp = ureq::get(url.as_str())
-            .set("Authorization", &format!("Bearer {}", &self.token))
-            .set("User-Agent", "wkfl")
-            .set("Accept", "application/vnd.github+json")
+
+        Ok(url)
+    }
+
+    /// Make a GET request to the GitHub API with query parameters.
+    fn api_get_with_query(
+        &self,
+        path_segments: &[&str],
+        query_pairs: &[(&str, String)],
+    ) -> Result<ureq::Response> {
+        let url = self.api_url(path_segments, query_pairs)?;
+        let resp = self
+            .set_headers(ureq::get(url.as_str()))
             .call()
             .with_context(|| {
                 format!(
                     "Failed to query GitHub API at path: {}",
+                    path_segments.join("/")
+                )
+            })?;
+        Ok(resp)
+    }
+
+    /// Make a PATCH request to the GitHub API without a request body.
+    fn api_patch_empty(&self, path_segments: &[&str]) -> Result<ureq::Response> {
+        let url = self.api_url(path_segments, &[])?;
+        let resp = self
+            .set_headers(ureq::patch(url.as_str()))
+            .call()
+            .with_context(|| {
+                format!(
+                    "Failed to patch GitHub API at path: {}",
+                    path_segments.join("/")
+                )
+            })?;
+        Ok(resp)
+    }
+
+    /// Make a DELETE request to the GitHub API.
+    fn api_delete(&self, path_segments: &[&str]) -> Result<ureq::Response> {
+        let url = self.api_url(path_segments, &[])?;
+        let resp = self
+            .set_headers(ureq::delete(url.as_str()))
+            .call()
+            .with_context(|| {
+                format!(
+                    "Failed to delete GitHub API at path: {}",
                     path_segments.join("/")
                 )
             })?;
@@ -209,6 +250,24 @@ impl GitHubClient {
         }
 
         Ok(notifications)
+    }
+
+    /// Mark a notification thread as read.
+    pub fn mark_notification_thread_read(&self, thread_id: &str) -> Result<()> {
+        self.api_patch_empty(&["notifications", "threads", thread_id])
+            .with_context(|| {
+                format!("Failed to mark GitHub notification thread '{thread_id}' as read")
+            })?;
+        Ok(())
+    }
+
+    /// Mark a notification thread as done.
+    pub fn mark_notification_thread_done(&self, thread_id: &str) -> Result<()> {
+        self.api_delete(&["notifications", "threads", thread_id])
+            .with_context(|| {
+                format!("Failed to mark GitHub notification thread '{thread_id}' as done")
+            })?;
+        Ok(())
     }
 
     /// List pull requests associated with a specific commit SHA
@@ -357,10 +416,8 @@ impl GitHubClient {
         T: for<'de> Deserialize<'de>,
         V: ?Sized + Serialize,
     {
-        let response = ureq::post(&self.graphql_base)
-            .set("Authorization", &format!("Bearer {}", &self.token))
-            .set("User-Agent", "wkfl")
-            .set("Accept", "application/vnd.github+json")
+        let response = self
+            .set_headers(ureq::post(&self.graphql_base))
             .send_json(json!({ "query": query, "variables": variables }))
             .with_context(|| "Failed to execute GitHub GraphQL request")?;
 
