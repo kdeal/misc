@@ -12,8 +12,8 @@ use crate::config::Config;
 use crate::config::WebChatProvider;
 use crate::git::{self, extract_owner_repo_from_url, extract_repo_from_url};
 use crate::github::{
-    create_github_client, create_github_client_for_host, is_bot_user, IssueComment, PrComments,
-    PrToReview, ReviewComment,
+    create_github_client, create_github_client_for_host, is_bot_user, IssueComment, Notification,
+    PrComments, PrToReview, ReviewComment,
 };
 use crate::jira::{create_jira_client, format_jira_date};
 use crate::llm;
@@ -721,13 +721,7 @@ pub fn get_prs_to_review(
     hostname: Option<&str>,
     config: &Config,
 ) -> anyhow::Result<()> {
-    let github_client = if let Some(hostname) = hostname {
-        create_github_client_for_host(hostname, config)?
-    } else {
-        let repo = git::get_repository()?;
-        let remote_url = git::get_default_remote_url(&repo)?;
-        create_github_client(&remote_url, config)?
-    };
+    let github_client = github_client_for_hostname_or_current_repo(hostname, config)?;
     let pull_requests = github_client.get_prs_to_review()?;
 
     if json {
@@ -746,6 +740,32 @@ pub fn get_prs_to_review(
     Ok(())
 }
 
+pub fn get_notifications(
+    since: Option<&str>,
+    all: bool,
+    json: bool,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let github_client = github_client_for_hostname_or_current_repo(hostname, config)?;
+    let notifications = github_client.get_notifications(since, all)?;
+
+    if json {
+        return print_json(&notifications);
+    }
+
+    if notifications.is_empty() {
+        println!("No GitHub notifications found");
+        return Ok(());
+    }
+
+    for notification in notifications {
+        print_notification(&notification);
+    }
+
+    Ok(())
+}
+
 fn github_client_for_remote(
     remote_url: &str,
     hostname: Option<&str>,
@@ -758,6 +778,19 @@ fn github_client_for_remote(
     }
 }
 
+fn github_client_for_hostname_or_current_repo(
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<crate::github::GitHubClient> {
+    if let Some(hostname) = hostname {
+        create_github_client_for_host(hostname, config)
+    } else {
+        let repo = git::get_repository()?;
+        let remote_url = git::get_default_remote_url(&repo)?;
+        create_github_client(&remote_url, config)
+    }
+}
+
 fn print_pr_to_review(pr: &PrToReview) {
     let draft = if pr.is_draft { " draft" } else { "" };
 
@@ -767,6 +800,35 @@ fn print_pr_to_review(pr: &PrToReview) {
     println!("Updated: {}", pr.updated_at);
     println!("URL: {}", pr.url);
 
+    println!();
+}
+
+fn print_notification(notification: &Notification) {
+    let status = if notification.unread {
+        "unread"
+    } else {
+        "read"
+    };
+
+    println!(
+        "{} [{}] {}",
+        notification.repository.full_name, status, notification.subject.title
+    );
+    println!(
+        "Reason: {} ({})",
+        notification.reason, notification.subject.subject_type
+    );
+    println!("Updated: {}", notification.updated_at);
+    if let Some(last_read_at) = &notification.last_read_at {
+        println!("Last read: {last_read_at}");
+    }
+    println!("Repository: {}", notification.repository.html_url);
+    if let Some(url) = &notification.subject.url {
+        println!("Subject API URL: {url}");
+    }
+    if let Some(url) = &notification.subject.latest_comment_url {
+        println!("Latest comment API URL: {url}");
+    }
     println!();
 }
 
