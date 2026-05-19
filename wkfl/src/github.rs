@@ -2,6 +2,10 @@ use crate::config::resolve_secret;
 use crate::config::Config;
 use crate::git::host_from_remote_url;
 use crate::gql_queries;
+use crate::gql_queries::prs_to_review::{
+    GraphQLPrToReviewNode, GraphQLPrsToReviewData, GraphQLPrsToReviewVariables,
+    GraphQLSearchConnection,
+};
 use crate::gql_queries::review_comments::{
     GraphQLReviewCommentConnection, GraphQLReviewCommentNode, GraphQLReviewCommentsData,
     GraphQLReviewCommentsVariables,
@@ -60,6 +64,21 @@ pub struct ReviewComment {
 pub struct PrComments {
     pub issue_comments: Vec<IssueComment>,
     pub review_comments: Vec<ReviewComment>,
+}
+
+/// A pull request that is waiting for the authenticated user's review.
+#[derive(Debug, Serialize)]
+pub struct PrToReview {
+    pub repo: String,
+    pub repo_url: String,
+    pub number: u64,
+    pub title: String,
+    pub author: User,
+    pub state: String,
+    pub is_draft: bool,
+    pub url: String,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 /// Client for interacting with the GitHub API
@@ -138,6 +157,38 @@ impl GitHubClient {
             issue_comments,
             review_comments,
         })
+    }
+
+    /// List open pull requests where the authenticated user has a pending review request.
+    pub fn get_prs_to_review(&self) -> Result<Vec<PrToReview>> {
+        let mut pull_requests = Vec::new();
+        let mut cursor: Option<String> = None;
+        let query = "is:pr is:open archived:false review-requested:@me";
+
+        loop {
+            let variables = GraphQLPrsToReviewVariables {
+                query,
+                cursor: cursor.as_deref(),
+            };
+
+            let data: GraphQLPrsToReviewData = self
+                .graphql_query(gql_queries::prs_to_review::QUERY, &variables)
+                .with_context(|| "Failed to query GitHub GraphQL API for PRs to review")?;
+
+            let GraphQLSearchConnection { nodes, page_info } = data.search;
+            pull_requests.extend(nodes.into_iter().flatten().map(PrToReview::from));
+
+            if page_info.has_next_page {
+                cursor = page_info.end_cursor;
+                if cursor.is_none() {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(pull_requests)
     }
 
     /// Get issue/timeline comments for a PR
@@ -234,7 +285,7 @@ impl GitHubClient {
             .send_json(json!({ "query": query, "variables": variables }))
             .with_context(|| "Failed to execute GitHub GraphQL request")?;
 
-        let parsed: gql_queries::GraphQLResponse<T> = response
+        let parsed: gql_queries::common::GraphQLResponse<T> = response
             .into_json()
             .with_context(|| "Failed to parse GitHub GraphQL response as JSON")?;
 
@@ -293,9 +344,41 @@ impl From<GraphQLReviewCommentNode> for ReviewComment {
     }
 }
 
+impl From<GraphQLPrToReviewNode> for PrToReview {
+    fn from(node: GraphQLPrToReviewNode) -> Self {
+        let author = node
+            .author
+            .map(|author| User {
+                login: author.login,
+                user_type: author.typename,
+            })
+            .unwrap_or_else(|| User {
+                login: "unknown".to_string(),
+                user_type: "Unknown".to_string(),
+            });
+
+        PrToReview {
+            repo: node.repository.name_with_owner,
+            repo_url: node.repository.url,
+            number: node.number,
+            title: node.title,
+            author,
+            state: node.state,
+            is_draft: node.is_draft,
+            url: node.url,
+            created_at: node.created_at,
+            updated_at: node.updated_at,
+        }
+    }
+}
+
 pub fn create_github_client(remote_url: &str, config: &Config) -> anyhow::Result<GitHubClient> {
     let host = host_from_remote_url(remote_url)?;
-    let github_token_raw = config.github_tokens.get(&host).ok_or_else(|| {
+    create_github_client_for_host(&host, config)
+}
+
+pub fn create_github_client_for_host(host: &str, config: &Config) -> anyhow::Result<GitHubClient> {
+    let github_token_raw = config.github_tokens.get(host).ok_or_else(|| {
         anyhow!(
             "GitHub token not configured for host '{}'. Add it to your config file.",
             host
@@ -304,7 +387,7 @@ pub fn create_github_client(remote_url: &str, config: &Config) -> anyhow::Result
     let github_token = resolve_secret(github_token_raw)
         .with_context(|| format!("Failed to resolve GitHub token for host '{host}'"))?;
 
-    Ok(GitHubClient::new(host, github_token))
+    Ok(GitHubClient::new(host.to_string(), github_token))
 }
 
 pub fn is_bot_user(user_login: &str, user_type: &str) -> bool {

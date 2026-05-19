@@ -127,8 +127,11 @@ enum Commands {
         #[arg(short, long, value_enum, default_value_t)]
         model_type: ModelType,
     },
-    /// Query GitHub for information about the current repository.
+    /// Query GitHub for repository and account information.
     Github {
+        /// GitHub hostname to use for authentication and API requests.
+        #[arg(long)]
+        hostname: Option<String>,
         #[command(subcommand)]
         command: GithubCommands,
     },
@@ -168,6 +171,13 @@ enum NotesCommands {
 
 #[derive(Subcommand, Debug)]
 enum GithubCommands {
+    /// List open pull requests that are waiting for your review.
+    #[command(name = "prs_to_review")]
+    PrsToReview {
+        /// Output matching pull requests as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// List pull requests associated with a commit.
     #[command(name = "get_pr")]
     GetPr {
@@ -434,11 +444,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             model_provider,
         } => actions::run_chat(query, model_type, model_provider, context.config)?,
         Commands::Github {
+            hostname,
             command: github_command,
         } => match github_command {
-            GithubCommands::GetPr { commit_sha, json } => {
-                actions::get_pull_request_for_commit(commit_sha, json, &context.config)?
+            GithubCommands::PrsToReview { json } => {
+                actions::get_prs_to_review(json, hostname.as_deref(), &context.config)?
             }
+            GithubCommands::GetPr { commit_sha, json } => actions::get_pull_request_for_commit(
+                commit_sha,
+                json,
+                hostname.as_deref(),
+                &context.config,
+            )?,
             GithubCommands::GetPrComments {
                 pr_number,
                 filter_timeline,
@@ -451,6 +468,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 !no_filter_bots,
                 filter_diff,
                 json,
+                hostname.as_deref(),
                 &context.config,
             )?,
         },

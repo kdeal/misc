@@ -1,3 +1,4 @@
+use super::common::{GraphQLAuthor, GraphQLPageInfo};
 use serde::{Deserialize, Serialize};
 
 pub const QUERY: &str = include_str!("review_comments.graphql");
@@ -36,14 +37,6 @@ pub struct GraphQLReviewCommentConnection {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GraphQLPageInfo {
-    #[serde(rename = "hasNextPage")]
-    pub has_next_page: bool,
-    #[serde(rename = "endCursor")]
-    pub end_cursor: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct GraphQLReviewCommentNode {
     pub body: String,
     pub author: Option<GraphQLAuthor>,
@@ -61,13 +54,6 @@ pub struct GraphQLReviewCommentNode {
     pub start_side: Option<String>,
     #[serde(rename = "pullRequestReviewThread")]
     pub pull_request_review_thread: Option<GraphQLReviewThread>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GraphQLAuthor {
-    pub login: String,
-    #[serde(rename = "__typename")]
-    pub typename: String,
 }
 
 #[derive(Debug, Deserialize)]

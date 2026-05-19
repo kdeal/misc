@@ -11,7 +11,10 @@ use crate::config::ChatProvider;
 use crate::config::Config;
 use crate::config::WebChatProvider;
 use crate::git::{self, extract_owner_repo_from_url, extract_repo_from_url};
-use crate::github::{create_github_client, is_bot_user, IssueComment, PrComments, ReviewComment};
+use crate::github::{
+    create_github_client, create_github_client_for_host, is_bot_user, IssueComment, PrComments,
+    PrToReview, ReviewComment,
+};
 use crate::jira::{create_jira_client, format_jira_date};
 use crate::llm;
 use crate::llm::anthropic;
@@ -637,6 +640,7 @@ pub fn run_build_commands(_context: &mut Context, list: bool) -> anyhow::Result<
 pub fn get_pull_request_for_commit(
     commit_sha: Option<String>,
     json: bool,
+    hostname: Option<&str>,
     config: &Config,
 ) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
@@ -650,7 +654,7 @@ pub fn get_pull_request_for_commit(
     let remote_url = git::get_default_remote_url(&repo)?;
     let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
 
-    let github_client = create_github_client(&remote_url, config)?;
+    let github_client = github_client_for_remote(&remote_url, hostname, config)?;
     let pull_requests = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
 
     if json {
@@ -679,12 +683,13 @@ pub fn get_pr_comments(
     filter_bots: bool,
     filter_diff: bool,
     json: bool,
+    hostname: Option<&str>,
     config: &Config,
 ) -> anyhow::Result<()> {
     let repo = git::get_repository()?;
     let remote_url = git::get_default_remote_url(&repo)?;
     let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
-    let github_client = create_github_client(&remote_url, config)?;
+    let github_client = github_client_for_remote(&remote_url, hostname, config)?;
 
     let pr_num = if let Some(num) = pr_number {
         num
@@ -709,6 +714,60 @@ pub fn get_pr_comments(
     print_comments_markdown(&comments, filter_timeline, filter_bots, filter_diff)?;
 
     Ok(())
+}
+
+pub fn get_prs_to_review(
+    json: bool,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let github_client = if let Some(hostname) = hostname {
+        create_github_client_for_host(hostname, config)?
+    } else {
+        let repo = git::get_repository()?;
+        let remote_url = git::get_default_remote_url(&repo)?;
+        create_github_client(&remote_url, config)?
+    };
+    let pull_requests = github_client.get_prs_to_review()?;
+
+    if json {
+        return print_json(&pull_requests);
+    }
+
+    if pull_requests.is_empty() {
+        println!("No pull requests found waiting for your review");
+        return Ok(());
+    }
+
+    for pr in pull_requests {
+        print_pr_to_review(&pr);
+    }
+
+    Ok(())
+}
+
+fn github_client_for_remote(
+    remote_url: &str,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<crate::github::GitHubClient> {
+    if let Some(hostname) = hostname {
+        create_github_client_for_host(hostname, config)
+    } else {
+        create_github_client(remote_url, config)
+    }
+}
+
+fn print_pr_to_review(pr: &PrToReview) {
+    let draft = if pr.is_draft { " draft" } else { "" };
+
+    println!("{} #{} [{}{}]", pr.repo, pr.number, pr.state, draft);
+    println!("Title: {}", pr.title);
+    println!("Author: {}", pr.author.login);
+    println!("Updated: {}", pr.updated_at);
+    println!("URL: {}", pr.url);
+
+    println!();
 }
 
 #[derive(Serialize)]

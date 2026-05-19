@@ -1,0 +1,27 @@
+query PrsToReview($query: String!, $cursor: String) {
+    search(query: $query, type: ISSUE, first: 100, after: $cursor) {
+        nodes {
+            ... on PullRequest {
+                number
+                title
+                url
+                state
+                isDraft
+                createdAt
+                updatedAt
+                author {
+                    login
+                    __typename
+                }
+                repository {
+                    nameWithOwner
+                    url
+                }
+            }
+        }
+        pageInfo {
+            hasNextPage
+            endCursor
+        }
+    }
+}
