@@ -43,6 +43,9 @@ enum Commands {
         /// Show absolute paths instead of relative names.
         #[arg(short, long)]
         full_path: bool,
+        /// Output repositories as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Select a repository and switch to it.
     Repo,
@@ -347,7 +350,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     match cli.command {
         Commands::RepoDebug => actions::print_repo_debug_info()?,
-        Commands::Repos { full_path } => actions::list_repositories(context.config, full_path)?,
+        Commands::Repos { full_path, json } => {
+            actions::list_repositories(context.config, full_path, json)?
+        }
         Commands::Repo => actions::switch_repo(&mut context)?,
         Commands::Clone => actions::clone_repo(&mut context)?,
         Commands::PruneBranches => actions::prune_merged_branches(&context.config)?,
