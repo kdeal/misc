@@ -177,6 +177,9 @@ enum GithubCommands {
         /// Output matching pull requests as JSON.
         #[arg(long)]
         json: bool,
+        /// Include pull requests requested via team review requests.
+        #[arg(long)]
+        include_teams: bool,
     },
     /// List pull requests associated with a commit.
     #[command(name = "get_pr")]
@@ -473,9 +476,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             hostname,
             command: github_command,
         } => match github_command {
-            GithubCommands::PrsToReview { json } => {
-                actions::get_prs_to_review(json, hostname.as_deref(), &context.config)?
-            }
+            GithubCommands::PrsToReview {
+                json,
+                include_teams,
+            } => actions::get_prs_to_review(
+                json,
+                include_teams,
+                hostname.as_deref(),
+                &context.config,
+            )?,
             GithubCommands::GetPr { commit_sha, json } => actions::get_pull_request_for_commit(
                 commit_sha,
                 json,

@@ -298,14 +298,19 @@ impl GitHubClient {
     }
 
     /// List open pull requests where the authenticated user has a pending review request.
-    pub fn get_prs_to_review(&self) -> Result<Vec<PrToReview>> {
+    pub fn get_prs_to_review(&self, include_teams: bool) -> Result<Vec<PrToReview>> {
         let mut pull_requests = Vec::new();
         let mut cursor: Option<String> = None;
-        let query = "is:pr is:open archived:false review-requested:@me";
+        let review_request_filter = if include_teams {
+            "review-requested:@me"
+        } else {
+            "user-review-requested:@me"
+        };
+        let query = format!("is:pr is:open archived:false {review_request_filter}");
 
         loop {
             let variables = GraphQLPrsToReviewVariables {
-                query,
+                query: &query,
                 cursor: cursor.as_deref(),
             };
 
