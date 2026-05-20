@@ -4,7 +4,7 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::{self, bail};
+use anyhow::{self, bail, Context};
 use url::Url;
 
 use git2::{
@@ -194,11 +194,36 @@ pub fn get_current_commit_sha(repo: &Repository) -> anyhow::Result<String> {
 }
 
 pub fn get_default_remote_url(repo: &Repository) -> anyhow::Result<String> {
-    let remote = repo.find_remote("origin")?;
-    let url = remote
-        .url()
-        .ok_or_else(|| anyhow::anyhow!("Remote 'origin' has no URL"))?;
-    Ok(url.to_string())
+    let remote_output = Command::new("jj")
+        .args(["git", "remote", "list"])
+        .current_dir(determine_repo_root_dir(repo))
+        .output()
+        .context("failed to execute 'jj' - ensure 'jj' is installed and on PATH")?;
+
+    if !remote_output.status.success() {
+        anyhow::bail!(
+            "Failed to list git remotes with jj, output: {}",
+            String::from_utf8_lossy(&remote_output.stderr)
+        );
+    }
+
+    default_remote_url_from_jj_remote_list(&String::from_utf8_lossy(&remote_output.stdout))
+}
+
+fn default_remote_url_from_jj_remote_list(remotes: &str) -> anyhow::Result<String> {
+    for remote in remotes.lines() {
+        let mut parts = remote.splitn(2, char::is_whitespace);
+        if parts.next() == Some("origin") {
+            let url = parts
+                .next()
+                .map(str::trim)
+                .filter(|url| !url.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("Remote 'origin' has no URL"))?;
+            return Ok(url.to_string());
+        }
+    }
+
+    anyhow::bail!("Remote 'origin' not found")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -460,4 +485,51 @@ pub fn host_from_remote_url(remote_url: &str) -> anyhow::Result<String> {
     };
 
     Ok(host)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_remote_url_from_jj_remote_list_returns_origin_url() {
+        let output = "origin https://github.com/kdeal/misc\n";
+
+        let url = default_remote_url_from_jj_remote_list(output).unwrap();
+
+        assert_eq!(url, "https://github.com/kdeal/misc");
+    }
+
+    #[test]
+    fn default_remote_url_from_jj_remote_list_ignores_other_remotes() {
+        let output = "fork git@github.com:someone/misc.git\norigin git@github.com:kdeal/misc.git\n";
+
+        let url = default_remote_url_from_jj_remote_list(output).unwrap();
+
+        assert_eq!(url, "git@github.com:kdeal/misc.git");
+    }
+
+    #[test]
+    fn default_remote_url_from_jj_remote_list_trims_whitespace() {
+        let output = "origin     https://github.com/kdeal/misc     \n";
+
+        let url = default_remote_url_from_jj_remote_list(output).unwrap();
+
+        assert_eq!(url, "https://github.com/kdeal/misc");
+    }
+
+    #[test]
+    fn default_remote_url_from_jj_remote_list_errors_without_origin() {
+        let err = default_remote_url_from_jj_remote_list("fork git@github.com:someone/misc.git\n")
+            .unwrap_err();
+
+        assert_eq!(err.to_string(), "Remote 'origin' not found");
+    }
+
+    #[test]
+    fn default_remote_url_from_jj_remote_list_errors_for_origin_without_url() {
+        let err = default_remote_url_from_jj_remote_list("origin\n").unwrap_err();
+
+        assert_eq!(err.to_string(), "Remote 'origin' has no URL");
+    }
 }
