@@ -718,11 +718,12 @@ pub fn get_pr_comments(
 
 pub fn get_prs_to_review(
     json: bool,
+    include_teams: bool,
     hostname: Option<&str>,
     config: &Config,
 ) -> anyhow::Result<()> {
     let github_client = github_client_for_hostname_or_current_repo(hostname, config)?;
-    let pull_requests = github_client.get_prs_to_review()?;
+    let pull_requests = github_client.get_prs_to_review(include_teams)?;
 
     if json {
         return print_json(&pull_requests);
