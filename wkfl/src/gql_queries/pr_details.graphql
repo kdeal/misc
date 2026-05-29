@@ -1,0 +1,167 @@
+query PrDetails(
+    $owner: String!,
+    $name: String!,
+    $prNumber: Int!,
+    $fileCursor: String,
+    $commitCursor: String,
+    $reviewCursor: String,
+    $commentCursor: String,
+    $threadCursor: String,
+    $reviewRequestsCursor: String
+) {
+    repository(owner: $owner, name: $name) {
+        pullRequest(number: $prNumber) {
+            number
+            title
+            url
+            state
+            body
+            createdAt
+            updatedAt
+            mergedAt
+            additions
+            deletions
+            changedFiles
+            author {
+                login
+                __typename
+            }
+            baseRefName
+            baseRefOid
+            headRefName
+            headRefOid
+            baseRepository {
+                nameWithOwner
+            }
+            headRepository {
+                nameWithOwner
+            }
+            reviewRequests(first: 100, after: $reviewRequestsCursor) {
+                nodes {
+                    requestedReviewer {
+                        __typename
+                        ... on User {
+                            login
+                        }
+                        ... on Team {
+                            name
+                            slug
+                        }
+                    }
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+            files(first: 100, after: $fileCursor) {
+                nodes {
+                    path
+                    additions
+                    deletions
+                    changeType
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+            commits(first: 100, after: $commitCursor) {
+                nodes {
+                    commit {
+                        oid
+                        message
+                    }
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+            reviews(first: 100, after: $reviewCursor) {
+                nodes {
+                    author {
+                        login
+                        __typename
+                    }
+                    state
+                    submittedAt
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+            comments(first: 100, after: $commentCursor) {
+                nodes {
+                    body
+                    author {
+                        login
+                        __typename
+                    }
+                    createdAt
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+            reviewThreads(first: 100, after: $threadCursor) {
+                nodes {
+                    id
+                    isResolved
+                    diffSide
+                    startDiffSide
+                    comments(first: 100) {
+                        nodes {
+                            body
+                            author {
+                                login
+                                __typename
+                            }
+                            createdAt
+                            path
+                            originalLine
+                            originalStartLine
+                            diffHunk
+                        }
+                        pageInfo {
+                            hasNextPage
+                            endCursor
+                        }
+                    }
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+            commitsForStatus: commits(last: 1) {
+                nodes {
+                    commit {
+                        oid
+                        status {
+                            state
+                            contexts {
+                                state
+                            }
+                        }
+                        statusCheckRollup {
+                            contexts(first: 100) {
+                                totalCount
+                                nodes {
+                                    __typename
+                                    ... on CheckRun {
+                                        name
+                                        status
+                                        conclusion
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

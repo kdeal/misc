@@ -1,0 +1,20 @@
+query PrDetailsComments($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+        pullRequest(number: $prNumber) {
+            comments(first: 100, after: $cursor) {
+                nodes {
+                    body
+                    author {
+                        login
+                        __typename
+                    }
+                    createdAt
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+        }
+    }
+}

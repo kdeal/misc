@@ -1,0 +1,18 @@
+query PrDetailsFiles($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+        pullRequest(number: $prNumber) {
+            files(first: 100, after: $cursor) {
+                nodes {
+                    path
+                    additions
+                    deletions
+                    changeType
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+        }
+    }
+}

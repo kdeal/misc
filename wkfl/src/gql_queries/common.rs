@@ -11,7 +11,7 @@ pub struct GraphQLError {
     pub message: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct GraphQLPageInfo {
     #[serde(rename = "hasNextPage")]
     pub has_next_page: bool,
@@ -19,7 +19,7 @@ pub struct GraphQLPageInfo {
     pub end_cursor: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct GraphQLAuthor {
     pub login: String,
     #[serde(rename = "__typename")]
