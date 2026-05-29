@@ -7,8 +7,8 @@ use crate::gql_queries::prs_to_review::{
     GraphQLSearchConnection,
 };
 use crate::gql_queries::review_comments::{
-    GraphQLReviewCommentConnection, GraphQLReviewCommentNode, GraphQLReviewCommentsData,
-    GraphQLReviewCommentsVariables,
+    GraphQLReviewCommentNode, GraphQLReviewCommentsData, GraphQLReviewCommentsVariables,
+    GraphQLReviewThreadConnection, GraphQLReviewThreadNode,
 };
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -400,8 +400,19 @@ impl GitHubClient {
                 )
             })?;
 
-            let GraphQLReviewCommentConnection { nodes, page_info } = pull_request.review_comments;
-            all_comments.extend(nodes.into_iter().map(ReviewComment::from));
+            let GraphQLReviewThreadConnection { nodes, page_info } = pull_request.review_threads;
+            for thread in nodes {
+                let GraphQLReviewThreadNode {
+                    is_resolved,
+                    diff_side,
+                    start_diff_side,
+                    comments,
+                } = thread;
+
+                all_comments.extend(comments.nodes.into_iter().map(|comment| {
+                    review_comment_from_node(comment, &diff_side, &start_diff_side, is_resolved)
+                }));
+            }
 
             if page_info.has_next_page {
                 cursor = page_info.end_cursor;
@@ -455,43 +466,43 @@ fn link_header_has_next(link_header: Option<&str>) -> bool {
         .unwrap_or(false)
 }
 
-impl From<GraphQLReviewCommentNode> for ReviewComment {
-    fn from(node: GraphQLReviewCommentNode) -> Self {
-        let GraphQLReviewCommentNode {
-            body,
-            author,
-            created_at,
-            path,
-            original_line,
-            original_start_line,
-            diff_hunk,
-            side,
-            start_side,
-            pull_request_review_thread,
-        } = node;
+fn review_comment_from_node(
+    node: GraphQLReviewCommentNode,
+    diff_side: &str,
+    start_diff_side: &Option<String>,
+    is_resolved: bool,
+) -> ReviewComment {
+    let GraphQLReviewCommentNode {
+        body,
+        author,
+        created_at,
+        path,
+        original_line,
+        original_start_line,
+        diff_hunk,
+    } = node;
 
-        let user = author
-            .map(|author| User {
-                login: author.login,
-                user_type: author.typename,
-            })
-            .unwrap_or_else(|| User {
-                login: "unknown".to_string(),
-                user_type: "Unknown".to_string(),
-            });
+    let user = author
+        .map(|author| User {
+            login: author.login,
+            user_type: author.typename,
+        })
+        .unwrap_or_else(|| User {
+            login: "unknown".to_string(),
+            user_type: "Unknown".to_string(),
+        });
 
-        ReviewComment {
-            body,
-            user,
-            created_at,
-            path,
-            original_line,
-            original_start_line,
-            diff_hunk,
-            side,
-            start_side,
-            is_resolved: pull_request_review_thread.map(|thread| thread.is_resolved),
-        }
+    ReviewComment {
+        body,
+        user,
+        created_at,
+        path,
+        original_line,
+        original_start_line,
+        diff_hunk,
+        side: diff_side.to_string(),
+        start_side: start_diff_side.clone(),
+        is_resolved: Some(is_resolved),
     }
 }
 

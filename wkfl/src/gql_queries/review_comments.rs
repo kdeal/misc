@@ -25,15 +25,31 @@ pub struct GraphQLRepository {
 
 #[derive(Debug, Deserialize)]
 pub struct GraphQLPullRequest {
-    #[serde(rename = "reviewComments")]
-    pub review_comments: GraphQLReviewCommentConnection,
+    #[serde(rename = "reviewThreads")]
+    pub review_threads: GraphQLReviewThreadConnection,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GraphQLReviewThreadConnection {
+    pub nodes: Vec<GraphQLReviewThreadNode>,
+    #[serde(rename = "pageInfo")]
+    pub page_info: GraphQLPageInfo,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GraphQLReviewThreadNode {
+    #[serde(rename = "isResolved")]
+    pub is_resolved: bool,
+    #[serde(rename = "diffSide")]
+    pub diff_side: String,
+    #[serde(rename = "startDiffSide")]
+    pub start_diff_side: Option<String>,
+    pub comments: GraphQLReviewCommentConnection,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct GraphQLReviewCommentConnection {
     pub nodes: Vec<GraphQLReviewCommentNode>,
-    #[serde(rename = "pageInfo")]
-    pub page_info: GraphQLPageInfo,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,15 +65,4 @@ pub struct GraphQLReviewCommentNode {
     pub original_start_line: Option<u32>,
     #[serde(rename = "diffHunk")]
     pub diff_hunk: String,
-    pub side: String,
-    #[serde(rename = "startSide")]
-    pub start_side: Option<String>,
-    #[serde(rename = "pullRequestReviewThread")]
-    pub pull_request_review_thread: Option<GraphQLReviewThread>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GraphQLReviewThread {
-    #[serde(rename = "isResolved")]
-    pub is_resolved: bool,
 }
