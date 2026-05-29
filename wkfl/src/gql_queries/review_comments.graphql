@@ -3,6 +3,7 @@ query ReviewComments($owner: String!, $name: String!, $prNumber: Int!, $cursor: 
         pullRequest(number: $prNumber) {
             reviewThreads(first: 100, after: $cursor) {
                 nodes {
+                    id
                     isResolved
                     diffSide
                     startDiffSide

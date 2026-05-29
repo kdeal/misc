@@ -181,12 +181,28 @@ enum GithubCommands {
         #[arg(long)]
         include_teams: bool,
     },
-    /// List pull requests associated with a commit.
+    /// Fetch information about a pull request for review.
     #[command(name = "get_pr")]
     GetPr {
+        /// Pull request number to inspect (defaults to the current commit's PR).
+        #[arg(value_hint = ValueHint::Other)]
+        pr_number: Option<u64>,
+        /// Repository to inspect as owner/name (defaults to the current repository).
+        #[arg(long, value_hint = ValueHint::Other)]
+        repo: Option<String>,
+        /// Output pull request information as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List pull requests associated with a commit.
+    #[command(name = "get_pr_for_commit")]
+    GetPrForCommit {
         /// Commit SHA to inspect (defaults to the current HEAD).
         #[arg(value_hint = ValueHint::Other)]
         commit_sha: Option<String>,
+        /// Repository to inspect as owner/name (defaults to the current repository).
+        #[arg(long, value_hint = ValueHint::Other)]
+        repo: Option<String>,
         /// Output matching pull requests as JSON.
         #[arg(long)]
         json: bool,
@@ -197,6 +213,9 @@ enum GithubCommands {
         /// Pull request number to inspect (defaults to the current commit's PR).
         #[arg(value_hint = ValueHint::Other)]
         pr_number: Option<u64>,
+        /// Repository to inspect as owner/name (defaults to the current repository).
+        #[arg(long, value_hint = ValueHint::Other)]
+        repo: Option<String>,
         /// Exclude general timeline comments from the output.
         #[arg(long)]
         filter_timeline: bool,
@@ -485,20 +504,38 @@ fn main() -> Result<(), Box<dyn Error>> {
                 hostname.as_deref(),
                 &context.config,
             )?,
-            GithubCommands::GetPr { commit_sha, json } => actions::get_pull_request_for_commit(
+            GithubCommands::GetPr {
+                pr_number,
+                repo,
+                json,
+            } => actions::get_pr(
+                pr_number,
+                repo.as_deref(),
+                json,
+                hostname.as_deref(),
+                &context.config,
+            )?,
+            GithubCommands::GetPrForCommit {
                 commit_sha,
+                repo,
+                json,
+            } => actions::get_pr_for_commit(
+                commit_sha,
+                repo.as_deref(),
                 json,
                 hostname.as_deref(),
                 &context.config,
             )?,
             GithubCommands::GetPrComments {
                 pr_number,
+                repo,
                 filter_timeline,
                 no_filter_bots,
                 filter_diff,
                 json,
             } => actions::get_pr_comments(
                 pr_number,
+                repo.as_deref(),
                 filter_timeline,
                 !no_filter_bots,
                 filter_diff,

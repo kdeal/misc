@@ -12,7 +12,7 @@ use crate::gql_queries::review_comments::{
 };
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use url::Url;
 /// A GitHub pull request minimal representation
 #[derive(Debug, Deserialize, Serialize)]
@@ -25,7 +25,7 @@ pub struct PullRequest {
 }
 
 /// A GitHub user
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct User {
     pub login: String,
     #[serde(rename = "type")]
@@ -33,7 +33,7 @@ pub struct User {
 }
 
 /// A GitHub issue/PR comment (timeline comment)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct IssueComment {
     pub body: String,
     pub user: User,
@@ -41,7 +41,7 @@ pub struct IssueComment {
 }
 
 /// A GitHub pull request review comment (diff comment)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ReviewComment {
     pub body: String,
     pub user: User,
@@ -59,11 +59,36 @@ pub struct ReviewComment {
     pub is_resolved: Option<bool>,
 }
 
+/// A GitHub pull request review thread.
+#[derive(Debug, Serialize)]
+pub struct ReviewThread {
+    pub id: String,
+    pub is_resolved: bool,
+    pub diff_side: String,
+    pub start_diff_side: Option<String>,
+    pub comments: Vec<ReviewComment>,
+}
+
 /// Container for all PR comment types
 #[derive(Debug, Serialize)]
 pub struct PrComments {
     pub issue_comments: Vec<IssueComment>,
     pub review_comments: Vec<ReviewComment>,
+}
+
+/// Review-oriented pull request details.
+#[derive(Debug, Serialize)]
+pub struct PullRequestDetails {
+    pub pull_request: Value,
+    pub diff: String,
+    pub files: Vec<Value>,
+    pub issue_comments: Vec<IssueComment>,
+    pub review_comments: Vec<ReviewComment>,
+    pub review_threads: Vec<ReviewThread>,
+    pub reviews: Vec<Value>,
+    pub commits: Vec<Value>,
+    pub status: Option<Value>,
+    pub check_runs: Option<Value>,
 }
 
 /// A pull request that is waiting for the authenticated user's review.
@@ -189,6 +214,21 @@ impl GitHubClient {
         Ok(resp)
     }
 
+    fn api_get_with_accept(&self, path_segments: &[&str], accept: &str) -> Result<ureq::Response> {
+        let url = self.api_url(path_segments, &[])?;
+        let resp = self
+            .set_headers(ureq::get(url.as_str()))
+            .set("Accept", accept)
+            .call()
+            .with_context(|| {
+                format!(
+                    "Failed to query GitHub API at path: {}",
+                    path_segments.join("/")
+                )
+            })?;
+        Ok(resp)
+    }
+
     /// Make a PATCH request to the GitHub API without a request body.
     fn api_patch_empty(&self, path_segments: &[&str]) -> Result<ureq::Response> {
         let url = self.api_url(path_segments, &[])?;
@@ -286,10 +326,99 @@ impl GitHubClient {
         Ok(prs)
     }
 
+    /// Fetch details useful when reviewing a pull request.
+    pub fn get_pull_request_details(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: u64,
+    ) -> Result<PullRequestDetails> {
+        let pr_path = ["repos", owner, repo, "pulls", &pr_number.to_string()];
+        let pull_request: Value = self
+            .api_get(&pr_path)
+            .with_context(|| format!("Failed to query GitHub API for PR #{pr_number}"))?
+            .into_json()
+            .with_context(|| "Failed to parse GitHub pull request response as JSON")?;
+
+        let diff = self
+            .api_get_with_accept(&pr_path, "application/vnd.github.v3.diff")
+            .with_context(|| format!("Failed to query GitHub API for PR #{pr_number} diff"))?
+            .into_string()
+            .with_context(|| "Failed to parse GitHub pull request diff response")?;
+
+        let files = self.get_paginated_values(&[
+            "repos",
+            owner,
+            repo,
+            "pulls",
+            &pr_number.to_string(),
+            "files",
+        ])?;
+        let issue_comments = self.get_issue_comments(owner, repo, pr_number)?;
+        let review_threads = self.get_review_threads(owner, repo, pr_number)?;
+        let review_comments = flatten_review_threads(&review_threads);
+        let reviews = self.get_paginated_values(&[
+            "repos",
+            owner,
+            repo,
+            "pulls",
+            &pr_number.to_string(),
+            "reviews",
+        ])?;
+        let commits = self.get_paginated_values(&[
+            "repos",
+            owner,
+            repo,
+            "pulls",
+            &pr_number.to_string(),
+            "commits",
+        ])?;
+
+        let head_sha = pull_request
+            .get("head")
+            .and_then(|head| head.get("sha"))
+            .and_then(Value::as_str);
+
+        let status = match head_sha {
+            Some(sha) => Some(
+                self.api_get(&["repos", owner, repo, "commits", sha, "status"])?
+                    .into_json()
+                    .with_context(|| "Failed to parse GitHub commit status response as JSON")?,
+            ),
+            None => None,
+        };
+
+        let check_runs = match head_sha {
+            Some(sha) => Some(
+                self.api_get_with_query(
+                    &["repos", owner, repo, "commits", sha, "check-runs"],
+                    &[("per_page", "100".to_string())],
+                )?
+                .into_json()
+                .with_context(|| "Failed to parse GitHub check runs response as JSON")?,
+            ),
+            None => None,
+        };
+
+        Ok(PullRequestDetails {
+            pull_request,
+            diff,
+            files,
+            issue_comments,
+            review_comments,
+            review_threads,
+            reviews,
+            commits,
+            status,
+            check_runs,
+        })
+    }
+
     /// Get all comments for a pull request
     pub fn get_pr_comments(&self, owner: &str, repo: &str, pr_number: u64) -> Result<PrComments> {
         let issue_comments = self.get_issue_comments(owner, repo, pr_number)?;
-        let review_comments = self.get_review_comments(owner, repo, pr_number)?;
+        let review_comments =
+            flatten_review_threads(&self.get_review_threads(owner, repo, pr_number)?);
 
         Ok(PrComments {
             issue_comments,
@@ -341,31 +470,48 @@ impl GitHubClient {
         repo: &str,
         pr_number: u64,
     ) -> Result<Vec<IssueComment>> {
-        let resp = self
-            .api_get(&[
-                "repos",
-                owner,
-                repo,
-                "issues",
-                &pr_number.to_string(),
-                "comments",
-            ])
-            .with_context(|| format!("Failed to query GitHub API for PR #{pr_number} comments"))?;
+        let mut comments = Vec::new();
+        let mut page = 1;
 
-        let comments: Vec<IssueComment> = resp
-            .into_json()
-            .with_context(|| "Failed to parse GitHub issue comments response as JSON")?;
+        loop {
+            let resp = self
+                .api_get_with_query(
+                    &[
+                        "repos",
+                        owner,
+                        repo,
+                        "issues",
+                        &pr_number.to_string(),
+                        "comments",
+                    ],
+                    &[("per_page", "100".to_string()), ("page", page.to_string())],
+                )
+                .with_context(|| {
+                    format!("Failed to query GitHub API for PR #{pr_number} comments")
+                })?;
+            let has_next_page = link_header_has_next(resp.header("link"));
+            let mut page_comments: Vec<IssueComment> = resp
+                .into_json()
+                .with_context(|| "Failed to parse GitHub issue comments response as JSON")?;
+            comments.append(&mut page_comments);
+
+            if !has_next_page {
+                break;
+            }
+            page += 1;
+        }
+
         Ok(comments)
     }
 
-    /// Get review/diff comments for a PR
-    fn get_review_comments(
+    /// Get review/diff threads for a PR
+    fn get_review_threads(
         &self,
         owner: &str,
         repo: &str,
         pr_number: u64,
-    ) -> Result<Vec<ReviewComment>> {
-        let mut all_comments = Vec::new();
+    ) -> Result<Vec<ReviewThread>> {
+        let mut all_threads = Vec::new();
         let mut cursor: Option<String> = None;
 
         loop {
@@ -402,16 +548,7 @@ impl GitHubClient {
 
             let GraphQLReviewThreadConnection { nodes, page_info } = pull_request.review_threads;
             for thread in nodes {
-                let GraphQLReviewThreadNode {
-                    is_resolved,
-                    diff_side,
-                    start_diff_side,
-                    comments,
-                } = thread;
-
-                all_comments.extend(comments.nodes.into_iter().map(|comment| {
-                    review_comment_from_node(comment, &diff_side, &start_diff_side, is_resolved)
-                }));
+                all_threads.push(review_thread_from_node(thread));
             }
 
             if page_info.has_next_page {
@@ -424,7 +561,31 @@ impl GitHubClient {
             }
         }
 
-        Ok(all_comments)
+        Ok(all_threads)
+    }
+
+    fn get_paginated_values(&self, path_segments: &[&str]) -> Result<Vec<Value>> {
+        let mut values = Vec::new();
+        let mut page = 1;
+
+        loop {
+            let resp = self.api_get_with_query(
+                path_segments,
+                &[("per_page", "100".to_string()), ("page", page.to_string())],
+            )?;
+            let has_next_page = link_header_has_next(resp.header("link"));
+            let mut page_values: Vec<Value> = resp
+                .into_json()
+                .with_context(|| "Failed to parse GitHub paginated response as JSON")?;
+            values.append(&mut page_values);
+
+            if !has_next_page {
+                break;
+            }
+            page += 1;
+        }
+
+        Ok(values)
     }
 
     fn graphql_query<T, V>(&self, query: &str, variables: &V) -> Result<T>
@@ -504,6 +665,53 @@ fn review_comment_from_node(
         start_side: start_diff_side.clone(),
         is_resolved: Some(is_resolved),
     }
+}
+
+fn review_thread_from_node(node: GraphQLReviewThreadNode) -> ReviewThread {
+    let GraphQLReviewThreadNode {
+        id,
+        is_resolved,
+        diff_side,
+        start_diff_side,
+        comments,
+    } = node;
+
+    ReviewThread {
+        id,
+        is_resolved,
+        diff_side: diff_side.clone(),
+        start_diff_side: start_diff_side.clone(),
+        comments: comments
+            .nodes
+            .into_iter()
+            .map(|comment| {
+                review_comment_from_node(comment, &diff_side, &start_diff_side, is_resolved)
+            })
+            .collect(),
+    }
+}
+
+fn flatten_review_threads(threads: &[ReviewThread]) -> Vec<ReviewComment> {
+    threads
+        .iter()
+        .flat_map(|thread| {
+            thread.comments.iter().map(|comment| ReviewComment {
+                body: comment.body.clone(),
+                user: User {
+                    login: comment.user.login.clone(),
+                    user_type: comment.user.user_type.clone(),
+                },
+                created_at: comment.created_at.clone(),
+                path: comment.path.clone(),
+                original_line: comment.original_line,
+                original_start_line: comment.original_start_line,
+                diff_hunk: comment.diff_hunk.clone(),
+                side: comment.side.clone(),
+                start_side: comment.start_side.clone(),
+                is_resolved: comment.is_resolved,
+            })
+        })
+        .collect()
 }
 
 impl From<GraphQLPrToReviewNode> for PrToReview {
