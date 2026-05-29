@@ -1,22 +1,24 @@
 query ReviewComments($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) {
     repository(owner: $owner, name: $name) {
         pullRequest(number: $prNumber) {
-            reviewComments(first: 100, after: $cursor) {
+            reviewThreads(first: 100, after: $cursor) {
                 nodes {
-                    body
-                    author {
-                        login
-                        __typename
-                    }
-                    createdAt
-                    path
-                    originalLine
-                    originalStartLine
-                    diffHunk
-                    side
-                    startSide
-                    pullRequestReviewThread {
-                        isResolved
+                    isResolved
+                    diffSide
+                    startDiffSide
+                    comments(first: 100) {
+                        nodes {
+                            body
+                            author {
+                                login
+                                __typename
+                            }
+                            createdAt
+                            path
+                            originalLine
+                            originalStartLine
+                            diffHunk
+                        }
                     }
                 }
                 pageInfo {
