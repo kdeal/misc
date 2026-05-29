@@ -1,0 +1,24 @@
+query PrDetailsReviewThreadComments($threadId: ID!, $cursor: String) {
+    node(id: $threadId) {
+        ... on PullRequestReviewThread {
+            comments(first: 100, after: $cursor) {
+                nodes {
+                    body
+                    author {
+                        login
+                        __typename
+                    }
+                    createdAt
+                    path
+                    originalLine
+                    originalStartLine
+                    diffHunk
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+        }
+    }
+}

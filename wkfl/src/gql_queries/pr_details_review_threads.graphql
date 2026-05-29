@@ -1,4 +1,4 @@
-query ReviewComments($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) {
+query PrDetailsReviewThreads($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) {
     repository(owner: $owner, name: $name) {
         pullRequest(number: $prNumber) {
             reviewThreads(first: 100, after: $cursor) {

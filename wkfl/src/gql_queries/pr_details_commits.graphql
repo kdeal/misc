@@ -1,0 +1,18 @@
+query PrDetailsCommits($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+        pullRequest(number: $prNumber) {
+            commits(first: 100, after: $cursor) {
+                nodes {
+                    commit {
+                        oid
+                        message
+                    }
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+        }
+    }
+}

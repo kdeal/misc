@@ -12,8 +12,8 @@ use crate::config::Config;
 use crate::config::WebChatProvider;
 use crate::git::{self, extract_owner_repo_from_url, extract_repo_from_url};
 use crate::github::{
-    create_github_client, create_github_client_for_host, is_bot_user, IssueComment, Notification,
-    PrComments, PrToReview, ReviewComment,
+    create_github_client, create_github_client_for_host, is_bot_user, GitHubClient, IssueComment,
+    Notification, PrComments, PrToReview, PullRequestDetails, ReviewComment,
 };
 use crate::jira::{create_jira_client, format_jira_date};
 use crate::llm;
@@ -637,24 +637,21 @@ pub fn run_build_commands(_context: &mut Context, list: bool) -> anyhow::Result<
     Ok(())
 }
 
-pub fn get_pull_request_for_commit(
+pub fn get_pr_for_commit(
     commit_sha: Option<String>,
+    repo_slug: Option<&str>,
     json: bool,
     hostname: Option<&str>,
     config: &Config,
 ) -> anyhow::Result<()> {
-    let repo = git::get_repository()?;
-
     let sha = if let Some(sha) = commit_sha {
         sha
     } else {
+        let repo = git::get_repository()?;
         git::get_current_commit_sha(&repo)?
     };
 
-    let remote_url = git::get_default_remote_url(&repo)?;
-    let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
-
-    let github_client = github_client_for_remote(&remote_url, hostname, config)?;
+    let (owner, repo_name, github_client) = github_repo_context(repo_slug, hostname, config)?;
     let pull_requests = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
 
     if json {
@@ -677,8 +674,29 @@ pub fn get_pull_request_for_commit(
     Ok(())
 }
 
+pub fn get_pr(
+    pr_number: Option<u64>,
+    repo_slug: Option<&str>,
+    json: bool,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let (owner, repo_name, github_client) = github_repo_context(repo_slug, hostname, config)?;
+    let pr_num = resolve_pr_number(pr_number, &github_client, &owner, &repo_name)?;
+
+    let details = github_client.get_pull_request_details(&owner, &repo_name, pr_num)?;
+
+    if json {
+        return print_json(&details);
+    }
+
+    print_pr_details_markdown(&details)
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn get_pr_comments(
     pr_number: Option<u64>,
+    repo_slug: Option<&str>,
     filter_timeline: bool,
     filter_bots: bool,
     filter_diff: bool,
@@ -686,24 +704,9 @@ pub fn get_pr_comments(
     hostname: Option<&str>,
     config: &Config,
 ) -> anyhow::Result<()> {
-    let repo = git::get_repository()?;
-    let remote_url = git::get_default_remote_url(&repo)?;
-    let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
-    let github_client = github_client_for_remote(&remote_url, hostname, config)?;
+    let (owner, repo_name, github_client) = github_repo_context(repo_slug, hostname, config)?;
 
-    let pr_num = if let Some(num) = pr_number {
-        num
-    } else {
-        // Find PR for current commit
-        let sha = git::get_current_commit_sha(&repo)?;
-        let prs = github_client.get_pull_requests_for_commit(&owner, &repo_name, &sha)?;
-
-        if prs.is_empty() {
-            anyhow::bail!("No pull request found for current commit {}", sha);
-        }
-
-        prs[0].number
-    };
+    let pr_num = resolve_pr_number(pr_number, &github_client, &owner, &repo_name)?;
 
     let comments = github_client.get_pr_comments(&owner, &repo_name, pr_num)?;
 
@@ -803,6 +806,45 @@ fn github_client_for_remote(
     }
 }
 
+fn github_repo_context(
+    repo_slug: Option<&str>,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<(String, String, GitHubClient)> {
+    match (repo_slug, hostname) {
+        (Some(_), None) => anyhow::bail!("--hostname is required when --repo is specified"),
+        (None, Some(_)) => anyhow::bail!("--repo is required when --hostname is specified"),
+        _ => {}
+    }
+
+    if let Some(repo_slug) = repo_slug {
+        let (owner, repo_name) = parse_repo_slug(repo_slug)?;
+        let Some(hostname) = hostname else {
+            unreachable!("repo_slug and hostname combinations are validated above")
+        };
+        let github_client = create_github_client_for_host(hostname, config)?;
+        return Ok((owner, repo_name, github_client));
+    }
+
+    let repo = git::get_repository()?;
+    let remote_url = git::get_default_remote_url(&repo)?;
+    let (owner, repo_name) = extract_owner_repo_from_url(&remote_url)?;
+    let github_client = github_client_for_remote(&remote_url, hostname, config)?;
+    Ok((owner, repo_name, github_client))
+}
+
+fn parse_repo_slug(repo_slug: &str) -> anyhow::Result<(String, String)> {
+    let (owner, repo_name) = repo_slug
+        .split_once('/')
+        .ok_or_else(|| anyhow!("Repository must be specified as owner/name"))?;
+
+    if owner.is_empty() || repo_name.is_empty() || repo_name.contains('/') {
+        anyhow::bail!("Repository must be specified as owner/name");
+    }
+
+    Ok((owner.to_string(), repo_name.to_string()))
+}
+
 fn github_client_for_hostname_or_current_repo(
     hostname: Option<&str>,
     config: &Config,
@@ -826,6 +868,236 @@ fn print_pr_to_review(pr: &PrToReview) {
     println!("URL: {}", pr.url);
 
     println!();
+}
+
+fn resolve_pr_number(
+    pr_number: Option<u64>,
+    github_client: &GitHubClient,
+    owner: &str,
+    repo_name: &str,
+) -> anyhow::Result<u64> {
+    if let Some(num) = pr_number {
+        return Ok(num);
+    }
+
+    let repo = git::get_repository()?;
+    let sha = git::get_current_commit_sha(&repo)?;
+    let prs = github_client.get_pull_requests_for_commit(owner, repo_name, &sha)?;
+
+    if prs.is_empty() {
+        anyhow::bail!("No pull request found for current commit {sha}");
+    }
+
+    Ok(prs[0].number)
+}
+
+fn print_pr_details_markdown(details: &PullRequestDetails) -> anyhow::Result<()> {
+    let pr = &details.pull_request;
+    let number = json_u64(pr, "number").unwrap_or_default();
+    let title = json_str(pr, "title").unwrap_or("(untitled)");
+
+    println!("# PR #{}: {}\n", number, title);
+    print_json_field("URL", pr, "html_url");
+    print_json_field("State", pr, "state");
+    print_json_field("Author", pr.get("user").unwrap_or(pr), "login");
+    print_json_field("Created", pr, "created_at");
+    print_json_field("Updated", pr, "updated_at");
+    print_json_field("Merged", pr, "merged_at");
+
+    if let Some(body) = json_str(pr, "body").filter(|body| !body.trim().is_empty()) {
+        println!("\n## Summary\n");
+        println!("{}\n", body.trim());
+    }
+
+    println!("## Branches\n");
+    println!("- Base: {}", branch_label(pr.get("base")));
+    println!("- Head: {}", branch_label(pr.get("head")));
+
+    println!("\n## Review Metadata\n");
+    println!(
+        "- Changed files: {}",
+        json_u64(pr, "changed_files").unwrap_or(0)
+    );
+    println!("- Additions: {}", json_u64(pr, "additions").unwrap_or(0));
+    println!("- Deletions: {}", json_u64(pr, "deletions").unwrap_or(0));
+    println!("- Commits: {}", details.commits.len());
+    println!("- Reviews: {}", details.reviews.len());
+    println!("- Timeline comments: {}", details.issue_comments.len());
+    println!("- Review comments: {}", details.review_comments.len());
+    println!("- Review threads: {}", details.review_threads.len());
+    println!(
+        "- Unresolved threads: {}",
+        details
+            .review_threads
+            .iter()
+            .filter(|thread| !thread.is_resolved)
+            .count()
+    );
+    println!(
+        "- Requested reviewers: {}",
+        user_list(pr.get("requested_reviewers"))
+    );
+    println!(
+        "- Requested teams: {}",
+        team_list(pr.get("requested_teams"))
+    );
+
+    if let Some(status) = &details.status {
+        println!("\n## Latest Status\n");
+        print_json_field("State", status, "state");
+        print_json_field("Total count", status, "total_count");
+    }
+
+    if let Some(check_runs) = &details.check_runs {
+        println!("\n## Latest Checks\n");
+        if let Some(total) = json_u64(check_runs, "total_count") {
+            println!("Total count: {}", total);
+        }
+        if let Some(runs) = check_runs
+            .get("check_runs")
+            .and_then(|runs| runs.as_array())
+        {
+            for run in runs {
+                let name = json_str(run, "name").unwrap_or("(unnamed)");
+                let status = json_str(run, "status").unwrap_or("unknown");
+                let conclusion = json_str(run, "conclusion").unwrap_or("none");
+                println!("- {}: {} / {}", name, status, conclusion);
+            }
+        }
+    }
+
+    if !details.files.is_empty() {
+        println!("\n## Files\n");
+        for file in &details.files {
+            let filename = json_str(file, "filename").unwrap_or("(unknown)");
+            let status = json_str(file, "status").unwrap_or("unknown");
+            let additions = json_u64(file, "additions").unwrap_or(0);
+            let deletions = json_u64(file, "deletions").unwrap_or(0);
+            println!(
+                "- {} ({}, +{}, -{})",
+                filename, status, additions, deletions
+            );
+        }
+    }
+
+    if !details.commits.is_empty() {
+        println!("\n## Commits\n");
+        for commit in &details.commits {
+            let sha = json_str(commit, "sha").unwrap_or("");
+            let short_sha = sha.get(..7).unwrap_or(sha);
+            let message = commit
+                .get("commit")
+                .and_then(|commit| commit.get("message"))
+                .and_then(|message| message.as_str())
+                .unwrap_or("")
+                .lines()
+                .next()
+                .unwrap_or("");
+            println!("- {} {}", short_sha, message);
+        }
+    }
+
+    if !details.reviews.is_empty() {
+        println!("\n## Reviews\n");
+        for review in &details.reviews {
+            let author = review
+                .get("user")
+                .and_then(|user| json_str(user, "login"))
+                .unwrap_or("unknown");
+            let state = json_str(review, "state").unwrap_or("unknown");
+            let submitted = json_str(review, "submitted_at").unwrap_or("unknown time");
+            println!("- @{}: {} ({})", author, state, submitted);
+        }
+    }
+
+    print_comments_markdown(
+        &PrComments {
+            issue_comments: details.issue_comments.clone(),
+            review_comments: details.review_comments.clone(),
+        },
+        false,
+        false,
+        false,
+    )?;
+
+    println!("\n## Diff\n");
+    println!("```diff");
+    println!("{}", details.diff.trim_end());
+    println!("```");
+
+    Ok(())
+}
+
+fn json_str<'a>(value: &'a serde_json::Value, key: &str) -> Option<&'a str> {
+    value.get(key).and_then(|value| value.as_str())
+}
+
+fn json_u64(value: &serde_json::Value, key: &str) -> Option<u64> {
+    value.get(key).and_then(|value| value.as_u64())
+}
+
+fn print_json_field(label: &str, value: &serde_json::Value, key: &str) {
+    if let Some(field) = value.get(key) {
+        if field.is_null() {
+            return;
+        }
+        if let Some(text) = field.as_str() {
+            println!("{}: {}", label, text);
+        } else {
+            println!("{}: {}", label, field);
+        }
+    }
+}
+
+fn branch_label(branch: Option<&serde_json::Value>) -> String {
+    branch
+        .map(|branch| {
+            let label = json_str(branch, "label").unwrap_or("unknown");
+            let sha = json_str(branch, "sha").unwrap_or("");
+            if sha.is_empty() {
+                label.to_string()
+            } else {
+                format!("{} ({})", label, sha)
+            }
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn user_list(value: Option<&serde_json::Value>) -> String {
+    let users = value
+        .and_then(|value| value.as_array())
+        .map(|users| {
+            users
+                .iter()
+                .filter_map(|user| json_str(user, "login"))
+                .map(|login| format!("@{}", login))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    if users.is_empty() {
+        "none".to_string()
+    } else {
+        users.join(", ")
+    }
+}
+
+fn team_list(value: Option<&serde_json::Value>) -> String {
+    let teams = value
+        .and_then(|value| value.as_array())
+        .map(|teams| {
+            teams
+                .iter()
+                .filter_map(|team| json_str(team, "slug"))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    if teams.is_empty() {
+        "none".to_string()
+    } else {
+        teams.join(", ")
+    }
 }
 
 fn print_notification(notification: &Notification) {

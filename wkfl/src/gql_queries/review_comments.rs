@@ -38,6 +38,7 @@ pub struct GraphQLReviewThreadConnection {
 
 #[derive(Debug, Deserialize)]
 pub struct GraphQLReviewThreadNode {
+    pub id: String,
     #[serde(rename = "isResolved")]
     pub is_resolved: bool,
     #[serde(rename = "diffSide")]
@@ -50,6 +51,8 @@ pub struct GraphQLReviewThreadNode {
 #[derive(Debug, Deserialize)]
 pub struct GraphQLReviewCommentConnection {
     pub nodes: Vec<GraphQLReviewCommentNode>,
+    #[serde(rename = "pageInfo")]
+    pub page_info: GraphQLPageInfo,
 }
 
 #[derive(Debug, Deserialize)]
