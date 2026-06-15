@@ -1,6 +1,6 @@
 FROM golang:trixie AS go-base
 
-FROM ubuntu:noble
+FROM ubuntu:noble AS devenv-cs
 
 ENV USER_PATH=""
 
@@ -18,7 +18,6 @@ RUN set -eux; \
      git \
      man-db \
      nodejs npm \
-     openssh-server \
      podman \
      python3-pip \
      python3-virtualenv \
@@ -29,9 +28,6 @@ RUN set -eux; \
      wget; \
     yes | unminimize; \
     rm -rf /var/lib/apt/lists/*; \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config; \
-    # Remove default user to free up 1000 uid in case I want to use it
-    userdel ubuntu; \
     #
     # Install rust from https://github.com/rust-lang/docker-rust/blob/master/stable/bullseye/Dockerfile
     #
@@ -81,6 +77,17 @@ COPY --from=go-base /usr/local/go/ /usr/local/go/
 
 # Adjust global path
 RUN sed "s%PATH=\"%PATH=\"${USER_PATH}%" -i /etc/environment
+
+FROM devenv-cs AS devenv-ssh
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get -y install --no-install-recommends \
+     openssh-server; \
+    rm -rf /var/lib/apt/lists/*; \
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config; \
+    # Remove default user to free up 1000 uid in case I want to use it
+    userdel ubuntu;
 
 COPY entrypoint.sh /tmp/
 

@@ -10,6 +10,13 @@ on:
 jobs:
   build_and_push:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: devenv-cs
+            image: devenv-cs
+          - target: devenv-ssh
+            image: devenv
     permissions:
       packages: write
     steps:
@@ -27,7 +34,8 @@ jobs:
       uses: docker/build-push-action@v7
       with:
         context: "{{defaultContext}}:devenv"
+        target: ${{ matrix.target }}
         platforms: linux/amd64,linux/arm64, linux/arm/v7
         push: true
         tags: |
-         ghcr.io/kdeal/devenv:latest
+         ghcr.io/kdeal/${{matrix.image}}:latest
