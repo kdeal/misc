@@ -1,0 +1,37 @@
+query PrDetailsStatusChecks($owner: String!, $name: String!, $prNumber: Int!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+        pullRequest(number: $prNumber) {
+            commitsForStatus: commits(last: 1) {
+                nodes {
+                    commit {
+                        oid
+                        statusCheckRollup {
+                            contexts(first: 100, after: $cursor) {
+                                totalCount
+                                nodes {
+                                    __typename
+                                    ... on CheckRun {
+                                        name
+                                        status
+                                        conclusion
+                                        detailsUrl
+                                    }
+                                    ... on StatusContext {
+                                        context
+                                        state
+                                        description
+                                        targetUrl
+                                    }
+                                }
+                                pageInfo {
+                                    hasNextPage
+                                    endCursor
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -7,7 +7,8 @@ query PrDetails(
     $reviewCursor: String,
     $commentCursor: String,
     $threadCursor: String,
-    $reviewRequestsCursor: String
+    $reviewRequestsCursor: String,
+    $statusCheckCursor: String
 ) {
     repository(owner: $owner, name: $name) {
         pullRequest(number: $prNumber) {
@@ -86,6 +87,7 @@ query PrDetails(
                     }
                     state
                     submittedAt
+                    body
                 }
                 pageInfo {
                     hasNextPage
@@ -143,11 +145,14 @@ query PrDetails(
                         status {
                             state
                             contexts {
+                                context
                                 state
+                                description
+                                targetUrl
                             }
                         }
                         statusCheckRollup {
-                            contexts(first: 100) {
+                            contexts(first: 100, after: $statusCheckCursor) {
                                 totalCount
                                 nodes {
                                     __typename
@@ -155,7 +160,18 @@ query PrDetails(
                                         name
                                         status
                                         conclusion
+                                        detailsUrl
                                     }
+                                    ... on StatusContext {
+                                        context
+                                        state
+                                        description
+                                        targetUrl
+                                    }
+                                }
+                                pageInfo {
+                                    hasNextPage
+                                    endCursor
                                 }
                             }
                         }

@@ -946,6 +946,17 @@ fn print_pr_details_markdown(details: &PullRequestDetails) -> anyhow::Result<()>
         println!("\n## Latest Status\n");
         print_json_field("State", status, "state");
         print_json_field("Total count", status, "total_count");
+        if let Some(contexts) = status
+            .get("contexts")
+            .and_then(|contexts| contexts.as_array())
+        {
+            if !contexts.is_empty() {
+                println!("Contexts:");
+                for context in contexts {
+                    print_status_context(context);
+                }
+            }
+        }
     }
 
     if let Some(check_runs) = &details.check_runs {
@@ -961,7 +972,23 @@ fn print_pr_details_markdown(details: &PullRequestDetails) -> anyhow::Result<()>
                 let name = json_str(run, "name").unwrap_or("(unnamed)");
                 let status = json_str(run, "status").unwrap_or("unknown");
                 let conclusion = json_str(run, "conclusion").unwrap_or("none");
-                println!("- {}: {} / {}", name, status, conclusion);
+                let details_url = json_str(run, "details_url");
+                if let Some(details_url) = details_url.filter(|url| !url.is_empty()) {
+                    println!("- {}: {} / {} ({})", name, status, conclusion, details_url);
+                } else {
+                    println!("- {}: {} / {}", name, status, conclusion);
+                }
+            }
+        }
+        if let Some(contexts) = check_runs
+            .get("status_contexts")
+            .and_then(|contexts| contexts.as_array())
+        {
+            if !contexts.is_empty() {
+                println!("Status contexts:");
+                for context in contexts {
+                    print_status_context(context);
+                }
             }
         }
     }
@@ -1006,7 +1033,16 @@ fn print_pr_details_markdown(details: &PullRequestDetails) -> anyhow::Result<()>
                 .unwrap_or("unknown");
             let state = json_str(review, "state").unwrap_or("unknown");
             let submitted = json_str(review, "submitted_at").unwrap_or("unknown time");
-            println!("- @{}: {} ({})", author, state, submitted);
+            println!("### Review by @{}\n", author);
+            println!("- State: {}", state);
+            println!("- Submitted: {}", submitted);
+            if let Some(body) = json_str(review, "body")
+                .map(str::trim)
+                .filter(|body| !body.is_empty())
+            {
+                println!("\n{}", body);
+            }
+            println!();
         }
     }
 
@@ -1046,6 +1082,23 @@ fn print_json_field(label: &str, value: &serde_json::Value, key: &str) {
         } else {
             println!("{}: {}", label, field);
         }
+    }
+}
+
+fn print_status_context(context: &serde_json::Value) {
+    let name = json_str(context, "context").unwrap_or("(unnamed)");
+    let state = json_str(context, "state").unwrap_or("unknown");
+    let description =
+        json_str(context, "description").filter(|description| !description.is_empty());
+    let target_url = json_str(context, "target_url").filter(|url| !url.is_empty());
+
+    match (description, target_url) {
+        (Some(description), Some(target_url)) => {
+            println!("- {}: {} - {} ({})", name, state, description, target_url);
+        }
+        (Some(description), None) => println!("- {}: {} - {}", name, state, description),
+        (None, Some(target_url)) => println!("- {}: {} ({})", name, state, target_url),
+        (None, None) => println!("- {}: {}", name, state),
     }
 }
 

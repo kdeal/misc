@@ -9,9 +9,9 @@ use crate::gql_queries::pr_details::{
     GraphQLPrCommitsPage, GraphQLPrConnectionPageData, GraphQLPrConnectionVariables,
     GraphQLPrDetailsData, GraphQLPrDetailsVariables, GraphQLPrFilesPage,
     GraphQLPrReviewRequestsPage, GraphQLPrReviewThreadsPage, GraphQLPrReviewsPage,
-    GraphQLPullRequest, GraphQLRequestedReviewer, GraphQLReviewConnection, GraphQLReviewNode,
-    GraphQLReviewRequestConnection, GraphQLReviewThreadCommentsData,
-    GraphQLReviewThreadCommentsVariables, GraphQLStatusCommit,
+    GraphQLPrStatusChecksPage, GraphQLPullRequest, GraphQLRequestedReviewer,
+    GraphQLReviewConnection, GraphQLReviewNode, GraphQLReviewRequestConnection,
+    GraphQLReviewThreadCommentsData, GraphQLReviewThreadCommentsVariables, GraphQLStatusCommit,
 };
 use crate::gql_queries::prs_to_review::{
     GraphQLPrToReviewNode, GraphQLPrsToReviewData, GraphQLPrsToReviewVariables,
@@ -369,6 +369,7 @@ impl GitHubClient {
             comment_cursor: None,
             thread_cursor: None,
             review_requests_cursor: None,
+            status_check_cursor: None,
         };
 
         let data: GraphQLPrDetailsData = self
@@ -406,7 +407,7 @@ impl GitHubClient {
         let pull_request = pull_request_value(&pr);
         let mut status = None;
         let mut check_runs = None;
-        if let Some(status_commit) = pr
+        if let Some(mut status_commit) = pr
             .commits_for_status
             .nodes
             .into_iter()
@@ -414,6 +415,27 @@ impl GitHubClient {
             .next()
             .map(|node| node.commit)
         {
+            let mut status_check_page_info = status_commit
+                .status_check_rollup
+                .as_ref()
+                .map(|rollup| rollup.contexts.page_info.clone());
+            while let Some(page_info) = status_check_page_info {
+                if !page_info.has_next_page {
+                    break;
+                }
+                let Some(cursor) = page_info.end_cursor.as_deref() else {
+                    break;
+                };
+                let Some(page) =
+                    self.get_pull_request_status_checks_page(owner, repo, pr_number, cursor)?
+                else {
+                    break;
+                };
+                status_check_page_info = Some(page.page_info.clone());
+                if let Some(rollup) = status_commit.status_check_rollup.as_mut() {
+                    rollup.contexts.nodes.extend(page.nodes);
+                }
+            }
             status = status_value(&status_commit);
             check_runs = Some(check_runs_value(&status_commit));
         }
@@ -770,6 +792,31 @@ impl GitHubClient {
         )
     }
 
+    fn get_pull_request_status_checks_page(
+        &self,
+        owner: &str,
+        repo: &str,
+        pr_number: u64,
+        cursor: &str,
+    ) -> Result<Option<crate::gql_queries::pr_details::GraphQLCheckRunConnection>> {
+        let variables = pr_connection_variables(owner, repo, pr_number, cursor);
+        let data: GraphQLPrConnectionPageData<GraphQLPrStatusChecksPage> = self
+            .graphql_query(gql_queries::pr_details::STATUS_CHECKS_QUERY, &variables)
+            .with_context(|| {
+                format!("Failed to query GitHub GraphQL API for PR #{pr_number} status checks")
+            })?;
+
+        let page = pull_request_connection_page(data, owner, repo, pr_number, "status checks")?;
+        Ok(page
+            .commits_for_status
+            .nodes
+            .into_iter()
+            .flatten()
+            .next()
+            .and_then(|node| node.commit.status_check_rollup)
+            .map(|rollup| rollup.contexts))
+    }
+
     fn get_review_thread_comments_page(
         &self,
         thread_id: &str,
@@ -1082,6 +1129,7 @@ fn review_value(review: GraphQLReviewNode) -> Value {
         "user": graphql_author_to_user(review.author),
         "state": review.state,
         "submitted_at": review.submitted_at,
+        "body": review.body,
     })
 }
 
@@ -1095,10 +1143,12 @@ fn issue_comment_from_node(comment: GraphQLIssueCommentNode) -> IssueComment {
 
 fn status_value(commit: &GraphQLStatusCommit) -> Option<Value> {
     commit.status.as_ref().map(|status| {
+        let contexts: Vec<Value> = status.contexts.iter().map(status_context_value).collect();
         json!({
             "sha": commit.oid,
             "state": status.state.to_lowercase(),
             "total_count": status.contexts.len(),
+            "contexts": contexts,
         })
     })
 }
@@ -1121,10 +1171,21 @@ fn check_runs_value(commit: &GraphQLStatusCommit) -> Value {
         .filter(|node| node.typename == "CheckRun")
         .map(check_run_value)
         .collect();
+    let status_contexts: Vec<Value> = commit
+        .status_check_rollup
+        .as_ref()
+        .map(|rollup| &rollup.contexts)
+        .into_iter()
+        .flat_map(|contexts| contexts.nodes.iter())
+        .filter_map(|node| node.as_ref())
+        .filter(|node| node.typename == "StatusContext")
+        .map(status_context_rollup_value)
+        .collect();
 
     json!({
         "total_count": rollup.contexts.total_count,
         "check_runs": check_runs,
+        "status_contexts": status_contexts,
     })
 }
 
@@ -1133,6 +1194,25 @@ fn check_run_value(run: &GraphQLCheckRunNode) -> Value {
         "name": run.name.as_deref().unwrap_or("(unnamed)"),
         "status": run.status.as_ref().map(|status| status.to_lowercase()).unwrap_or_else(|| "unknown".to_string()),
         "conclusion": run.conclusion.as_ref().map(|conclusion| conclusion.to_lowercase()),
+        "details_url": run.details_url,
+    })
+}
+
+fn status_context_value(context: &crate::gql_queries::pr_details::GraphQLStatusContext) -> Value {
+    json!({
+        "context": context.context,
+        "state": context.state.to_lowercase(),
+        "description": context.description,
+        "target_url": context.target_url,
+    })
+}
+
+fn status_context_rollup_value(context: &GraphQLCheckRunNode) -> Value {
+    json!({
+        "context": context.context.as_deref().unwrap_or("(unnamed)"),
+        "state": context.state.as_ref().map(|state| state.to_lowercase()).unwrap_or_else(|| "unknown".to_string()),
+        "description": context.description,
+        "target_url": context.target_url,
     })
 }
 

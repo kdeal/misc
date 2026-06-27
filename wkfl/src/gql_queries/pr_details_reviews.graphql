@@ -9,6 +9,7 @@ query PrDetailsReviews($owner: String!, $name: String!, $prNumber: Int!, $cursor
                     }
                     state
                     submittedAt
+                    body
                 }
                 pageInfo {
                     hasNextPage

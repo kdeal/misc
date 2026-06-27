@@ -10,6 +10,7 @@ pub const REVIEW_THREADS_QUERY: &str = include_str!("pr_details_review_threads.g
 pub const REVIEW_REQUESTS_QUERY: &str = include_str!("pr_details_review_requests.graphql");
 pub const REVIEW_THREAD_COMMENTS_QUERY: &str =
     include_str!("pr_details_review_thread_comments.graphql");
+pub const STATUS_CHECKS_QUERY: &str = include_str!("pr_details_status_checks.graphql");
 
 #[derive(Debug, Serialize)]
 pub struct GraphQLPrDetailsVariables<'a> {
@@ -29,6 +30,8 @@ pub struct GraphQLPrDetailsVariables<'a> {
     pub thread_cursor: Option<&'a str>,
     #[serde(rename = "reviewRequestsCursor")]
     pub review_requests_cursor: Option<&'a str>,
+    #[serde(rename = "statusCheckCursor")]
+    pub status_check_cursor: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -86,6 +89,12 @@ pub struct GraphQLPrReviewThreadsPage {
 pub struct GraphQLPrReviewRequestsPage {
     #[serde(rename = "reviewRequests")]
     pub review_requests: GraphQLReviewRequestConnection,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GraphQLPrStatusChecksPage {
+    #[serde(rename = "commitsForStatus")]
+    pub commits_for_status: GraphQLStatusCommitConnection,
 }
 
 #[derive(Debug, Serialize)]
@@ -228,6 +237,7 @@ pub struct GraphQLReviewNode {
     pub state: String,
     #[serde(rename = "submittedAt")]
     pub submitted_at: Option<String>,
+    pub body: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -273,7 +283,16 @@ pub struct GraphQLStatusCommit {
 #[derive(Debug, Deserialize)]
 pub struct GraphQLStatus {
     pub state: String,
-    pub contexts: Vec<serde_json::Value>,
+    pub contexts: Vec<GraphQLStatusContext>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GraphQLStatusContext {
+    pub context: String,
+    pub state: String,
+    pub description: Option<String>,
+    #[serde(rename = "targetUrl")]
+    pub target_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -286,6 +305,8 @@ pub struct GraphQLCheckRunConnection {
     #[serde(rename = "totalCount")]
     pub total_count: u64,
     pub nodes: Vec<Option<GraphQLCheckRunNode>>,
+    #[serde(rename = "pageInfo")]
+    pub page_info: GraphQLPageInfo,
 }
 
 #[derive(Debug, Deserialize)]
@@ -295,4 +316,11 @@ pub struct GraphQLCheckRunNode {
     pub name: Option<String>,
     pub status: Option<String>,
     pub conclusion: Option<String>,
+    #[serde(rename = "detailsUrl")]
+    pub details_url: Option<String>,
+    pub context: Option<String>,
+    pub state: Option<String>,
+    pub description: Option<String>,
+    #[serde(rename = "targetUrl")]
+    pub target_url: Option<String>,
 }
