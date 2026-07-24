@@ -1,12 +1,13 @@
 import Testing
+
 @testable import WkflCli
 
 @Test func rootCommandUsesExecutableName() {
-    #expect(WkflCommand.configuration.commandName == "wkfl")
+  #expect(WkflCommand.configuration.commandName == "wkfl")
 }
 
 @Test func verboseFlagParses() throws {
-    let command = try WkflCommand.parse(["--verbose"])
+  let command = try WkflCommand.parse(["--verbose"])
 
-    #expect(command.verbose)
+  #expect(command.verbose)
 }

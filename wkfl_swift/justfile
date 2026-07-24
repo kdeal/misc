@@ -1,0 +1,16 @@
+format:
+    swift format --in-place --recursive Package.swift Sources Tests
+
+format-check:
+    swift format lint --strict --recursive Package.swift Sources Tests
+
+resolve:
+    swift package resolve
+
+build:
+    swift build
+
+test:
+    swift test
+
+ci: resolve build test
