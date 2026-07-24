@@ -3,7 +3,7 @@
 ## Status and scope
 
 This document is the normative migration contract for the Swift implementation of `wkfl`. It
-describes the user-visible behavior of the Rust implementation at repository revision `638553a`
+describes the user-visible behavior of the Rust implementation at repository revision `3ebe4fe3`
 and records every intentional Swift difference known at the start of the port.
 
 Later porting work must preserve the behavior marked **Preserve**. Behavior marked **Fix** is not a
@@ -208,9 +208,14 @@ comments, threads, requests, thread comments, and status-check rollup contexts. 
 commit-associated PR endpoint used by `get-pr-for-commit` and implicit PR resolution also paginates
 rather than silently stopping at GitHub's default first page. For check rollups,
 `total_count` remains GitHub's count of all rollup contexts while `check_runs` contains every
-context whose type is `CheckRun`; non-check contexts are intentionally excluded. A deleted head
-repository uses a `null` label as specified in the JSON contract rather than substituting the base
-repository.
+context whose type is `CheckRun` and `status_contexts` contains every `StatusContext`. Other context
+types are intentionally excluded from both arrays. A deleted head repository uses a `null` label as
+specified in the JSON contract rather than substituting the base repository.
+
+`get-pr` Markdown preserves the expanded Rust output added in revision `3ebe4fe3`: Latest Status
+lists legacy status contexts with descriptions and target URLs; Latest Checks lists check-run detail
+URLs and rollup status contexts; Reviews render each review's author, state, submission time, and
+nonempty body.
 
 Bot matching preserves Rust behavior: GitHub type `Bot`, login beginning with case-sensitive
 `service`, or login ending with case-sensitive `[bot]`.
@@ -381,13 +386,18 @@ schema below. Exact field names and scalar types are compatibility requirements.
 - `merged_at` and `head.label` are string or `null`; `body` and all other base/head fields are
   strings. `head.label` is `null` when GitHub reports that the head repository was deleted.
 - Files are `{filename,status,additions,deletions}`; reviews are
-  `{user:{login,type},state,submitted_at}` with nullable `submitted_at`; commits are
-  `{sha,commit:{message}}`.
+  `{user:{login,type},state,submitted_at,body}` with nullable `submitted_at` and string `body`;
+  commits are `{sha,commit:{message}}`.
 - Review threads are `{id,is_resolved,diff_side,start_diff_side,comments:[ReviewComment]}`. They do
   not duplicate review-comment fields at thread level. `start_diff_side` is nullable. Internal
   pagination metadata is omitted.
-- Status is `null` or `{sha,state,total_count}`. Check runs are `null` or
-  `{total_count,check_runs:[{name,status,conclusion}]}`; each `conclusion` is a nullable key.
+- A status context is `{context,state,description,target_url}`. `description` and `target_url` are
+  nullable keys; `state` is lowercase.
+- Status is `null` or `{sha,state,total_count,contexts:[StatusContext]}`.
+- Check runs are `null` or
+  `{total_count,check_runs:[{name,status,conclusion,details_url}],status_contexts:[StatusContext]}`.
+  Each `conclusion` and `details_url` is a nullable key. When the latest commit has no status-check
+  rollup, the object is `{total_count:0,check_runs:[]}` and omits `status_contexts`.
 
 `review_comments` intentionally duplicates comments also nested in `review_threads` for Rust JSON
 compatibility. `prs-to-review` results preserve GraphQL state casing. PR-detail `pull_request.state`, file
@@ -515,7 +525,7 @@ This index is intended for later issues to reference directly.
 | G01 | Rust GitHub subcommands use underscores. | **Fix:** use kebab-case without snake_case aliases. |
 | G02 | Closed-unmerged PRs are displayed as `open`. | **Fix:** display `closed`. |
 | G03 | Missing head repository falls back to base repository. | **Fix:** emit `head.label: null`. |
-| G04 | Status-check rollup can report total beyond returned first 100. | **Fix:** paginate all contexts; retain GitHub's total. |
+| G04 | Rust paginates all status-check rollup contexts as of `3ebe4fe3`. | **Preserve:** fetch every page and retain GitHub's total. |
 | G05 | Missing PR number silently chooses first HEAD-associated PR. | **Preserve**. |
 | G06 | Commit-associated PR lookup silently uses GitHub's first page. | **Fix:** paginate every page. |
 | G07 | Notification `--since` is not locally validated. | **Fix:** require ISO 8601 before request. |
