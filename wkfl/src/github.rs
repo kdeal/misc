@@ -426,11 +426,14 @@ impl GitHubClient {
                 let Some(cursor) = page_info.end_cursor.as_deref() else {
                     break;
                 };
-                let Some(page) =
+                let Some((page_commit_oid, page)) =
                     self.get_pull_request_status_checks_page(owner, repo, pr_number, cursor)?
                 else {
                     break;
                 };
+                if page_commit_oid != status_commit.oid {
+                    break;
+                }
                 status_check_page_info = Some(page.page_info.clone());
                 if let Some(rollup) = status_commit.status_check_rollup.as_mut() {
                     rollup.contexts.nodes.extend(page.nodes);
@@ -798,7 +801,7 @@ impl GitHubClient {
         repo: &str,
         pr_number: u64,
         cursor: &str,
-    ) -> Result<Option<crate::gql_queries::pr_details::GraphQLCheckRunConnection>> {
+    ) -> Result<Option<(String, crate::gql_queries::pr_details::GraphQLCheckRunConnection)>> {
         let variables = pr_connection_variables(owner, repo, pr_number, cursor);
         let data: GraphQLPrConnectionPageData<GraphQLPrStatusChecksPage> = self
             .graphql_query(gql_queries::pr_details::STATUS_CHECKS_QUERY, &variables)
@@ -813,8 +816,11 @@ impl GitHubClient {
             .into_iter()
             .flatten()
             .next()
-            .and_then(|node| node.commit.status_check_rollup)
-            .map(|rollup| rollup.contexts))
+            .and_then(|node| {
+                node.commit
+                    .status_check_rollup
+                    .map(|rollup| (node.commit.oid, rollup.contexts))
+            }))
     }
 
     fn get_review_thread_comments_page(
