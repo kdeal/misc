@@ -16,6 +16,8 @@ jobs:
         include:
           - target: devenv-cs
             image: devenv-cs
+          - target: devenv-ci
+            image: devenv-ci
           - target: devenv-ssh
             image: devenv
     permissions:

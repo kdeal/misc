@@ -132,11 +132,9 @@ COPY --from=go-base /usr/local/go/ /usr/local/go/
 RUN sed "s%PATH=\"%PATH=\"${USER_PATH}%" -i /etc/environment
 
 #
-# Codespaces Image
+# Ubuntu User Image
 #
-FROM devenv-base AS devenv-cs
-LABEL \
-    devcontainer.metadata="[{\"containerUser\":\"ubuntu\",\"remoteUser\":\"ubuntu\"}]"
+FROM devenv-base AS devenv-ubuntu
 
 RUN set -eux; \
     apt-get update; \
@@ -147,6 +145,29 @@ RUN set -eux; \
     chmod 0440 /etc/sudoers.d/ubuntu;
 
 USER ubuntu
+
+#
+# Codespaces Image
+#
+FROM devenv-ubuntu AS devenv-cs
+LABEL \
+    devcontainer.metadata="[{\"containerUser\":\"ubuntu\",\"remoteUser\":\"ubuntu\"}]"
+
+#
+# CI Image
+#
+FROM devenv-ubuntu AS devenv-ci
+
+ENV PATH=/home/ubuntu/.local/bin:$PATH
+
+RUN set -eux; \
+    mkdir -p /home/ubuntu/.config/cmd_install /home/ubuntu/.local/bin; \
+    curl -fsSL https://raw.githubusercontent.com/kdeal/cs-dotfiles/main/bin/cmd-install \
+        -o /home/ubuntu/.local/bin/cmd-install; \
+    curl -fsSL https://raw.githubusercontent.com/kdeal/cs-dotfiles/main/xdg_config/cmd_install/config.toml \
+        -o /home/ubuntu/.config/cmd_install/config.toml; \
+    chmod +x /home/ubuntu/.local/bin/cmd-install; \
+    cmd-install just uv jj stylua oxfmt oxlint ty ruff
 
 #
 # SSH Image
