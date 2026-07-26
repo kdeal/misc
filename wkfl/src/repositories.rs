@@ -5,8 +5,8 @@ use std::{
 
 /// Returns `true` when the directory contains metadata for a supported VCS
 /// repository. Currently, a directory is considered a repository if it has a
-/// `.git` or `.jj` subdirectory, allowing the `repos` command to surface both
-/// Git and Jujutsu repositories.
+/// `.git` or `.jj` subdirectory, allowing the `repo list` command to surface
+/// both Git and Jujutsu repositories.
 fn is_dir_a_repo(directory: &Path) -> bool {
     let has_git_dir = directory.join(".git").as_path().exists();
     let has_jj_dir = directory.join(".jj").as_path().exists();

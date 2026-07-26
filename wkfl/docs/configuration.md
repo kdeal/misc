@@ -114,12 +114,12 @@ wkfl looks for project-level settings in two locations (later entries override e
 These files currently support overriding workflow commands:
 
 ```toml
-# Commands to run for `wkfl test`
+# Commands to run for `wkfl repo test`
 test_commands = ["cargo test"]
 
-# Commands to run for `wkfl fmt`
+# Commands to run for `wkfl repo fmt`
 fmt_commands = ["cargo fmt"]
 
-# Commands to run for `wkfl build`
+# Commands to run for `wkfl repo build`
 build_commands = ["cargo build"]
 ```
