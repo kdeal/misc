@@ -20,3 +20,17 @@ steps:
       - docker#v5.13.0:
           image: "ghcr.io/kdeal/devenv-ci"
           propagate-uid-gid: true
+
+  - label: ":rust: Rust CI"
+    key: "wkfl_rust"
+    command: |
+      cd wkfl
+      rustup component add rustfmt clippy
+      just ci
+    env:
+      CARGO_TERM_COLOR: "always"
+    if_changed: "{wkfl/**,.buildkite/pipeline.yaml}"
+    plugins:
+      - docker#v5.13.0:
+          image: "ghcr.io/kdeal/devenv-ci"
+          propagate-uid-gid: true
