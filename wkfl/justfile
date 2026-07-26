@@ -1,0 +1,9 @@
+build:
+    cargo build
+
+test:
+    cargo fmt --check
+    cargo clippy -- -Dwarnings
+    cargo test
+
+ci: build test
