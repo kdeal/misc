@@ -36,57 +36,17 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Print diagnostic information about the current Git repository.
-    RepoDebug,
-    /// List repositories in the configured repositories directory.
-    Repos {
-        /// Show absolute paths instead of relative names.
-        #[arg(short, long)]
-        full_path: bool,
-        /// Output repositories as JSON.
-        #[arg(long)]
-        json: bool,
+    /// Select or operate on repositories.
+    Repo {
+        #[command(subcommand)]
+        command: Option<RepoCommands>,
     },
-    /// Select a repository and switch to it.
-    Repo,
     /// Print the currently resolved wkfl configuration.
     Config,
-    /// Clone a repository into the repositories directory.
-    Clone,
-    /// List all local branches and delete those whose pull request has merged.
-    PruneBranches,
-    /// Run test commands defined in the repository configuration.
-    Test {
-        /// List configured commands without executing them.
-        #[arg(long)]
-        list: bool,
-    },
-    /// Run formatting commands defined in the repository configuration.
-    Fmt {
-        /// List configured commands without executing them.
-        #[arg(long)]
-        list: bool,
-    },
-    /// Run build commands defined in the repository configuration.
-    Build {
-        /// List configured commands without executing them.
-        #[arg(long)]
-        list: bool,
-    },
-    /// Prompt for a yes/no confirmation and exit non-zero on no.
-    Confirm {
-        /// Override the confirmation prompt text.
-        #[arg(value_hint = ValueHint::Other)]
-        prompt: Option<String>,
-        /// Treat an empty response as an affirmative answer.
-        #[arg(short = 't', long)]
-        default_true: bool,
-    },
-    /// Prompt to select a value from newline-delimited stdin input.
-    Select {
-        /// Override the selection prompt text.
-        #[arg(value_hint = ValueHint::Other)]
-        prompt: Option<String>,
+    /// Run interactive terminal utilities.
+    Tui {
+        #[command(subcommand)]
+        command: TuiCommands,
     },
     /// Open or create notes in the configured notes directory.
     Notes {
@@ -148,6 +108,62 @@ enum Commands {
 }
 
 #[derive(Subcommand, Debug)]
+enum RepoCommands {
+    /// Select a repository and switch to it.
+    Cd,
+    /// Print diagnostic information about the current Git repository.
+    Debug,
+    /// List repositories in the configured repositories directory.
+    List {
+        /// Show absolute paths instead of relative names.
+        #[arg(short, long)]
+        full_path: bool,
+        /// Output repositories as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Clone a repository into the repositories directory.
+    Clone,
+    /// Run test commands defined in the repository configuration.
+    Test {
+        /// List configured commands without executing them.
+        #[arg(long)]
+        list: bool,
+    },
+    /// Run formatting commands defined in the repository configuration.
+    Fmt {
+        /// List configured commands without executing them.
+        #[arg(long)]
+        list: bool,
+    },
+    /// Run build commands defined in the repository configuration.
+    Build {
+        /// List configured commands without executing them.
+        #[arg(long)]
+        list: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum TuiCommands {
+    /// Prompt for a yes/no confirmation and exit non-zero on no.
+    Confirm {
+        /// Override the confirmation prompt text.
+        #[arg(value_hint = ValueHint::Other)]
+        prompt: Option<String>,
+        /// Treat an empty response as an affirmative answer.
+        #[arg(short = 't', long)]
+        default_true: bool,
+    },
+    /// Prompt to select a value from newline-delimited stdin input.
+    Select {
+        /// Override the selection prompt text.
+        #[arg(value_hint = ValueHint::Other)]
+        prompt: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum NotesCommands {
     /// Open yesterday's daily note in your editor.
     Yesterday,
@@ -172,7 +188,7 @@ enum NotesCommands {
 #[derive(Subcommand, Debug)]
 enum GithubCommands {
     /// List open pull requests that are waiting for your review.
-    #[command(name = "prs_to_review")]
+    #[command(name = "prs-to-review")]
     PrsToReview {
         /// Output matching pull requests as JSON.
         #[arg(long)]
@@ -182,7 +198,7 @@ enum GithubCommands {
         include_teams: bool,
     },
     /// Fetch information about a pull request for review.
-    #[command(name = "get_pr")]
+    #[command(name = "get-pr")]
     GetPr {
         /// Pull request number to inspect (defaults to the current commit's PR).
         #[arg(value_hint = ValueHint::Other)]
@@ -195,7 +211,7 @@ enum GithubCommands {
         json: bool,
     },
     /// List pull requests associated with a commit.
-    #[command(name = "get_pr_for_commit")]
+    #[command(name = "get-pr-for-commit")]
     GetPrForCommit {
         /// Commit SHA to inspect (defaults to the current HEAD).
         #[arg(value_hint = ValueHint::Other)]
@@ -208,7 +224,7 @@ enum GithubCommands {
         json: bool,
     },
     /// Print comments for a pull request.
-    #[command(name = "get_pr_comments")]
+    #[command(name = "get-pr-comments")]
     GetPrComments {
         /// Pull request number to inspect (defaults to the current commit's PR).
         #[arg(value_hint = ValueHint::Other)]
@@ -242,14 +258,14 @@ enum GithubCommands {
         json: bool,
     },
     /// Mark a notification thread as read.
-    #[command(name = "mark_thread_read")]
+    #[command(name = "mark-thread-read")]
     MarkThreadRead {
         /// Notification thread ID from `github notifications`.
         #[arg(value_hint = ValueHint::Other)]
         thread_id: String,
     },
     /// Mark a notification thread as done.
-    #[command(name = "mark_thread_done")]
+    #[command(name = "mark-thread-done")]
     MarkThreadDone {
         /// Notification thread ID from `github notifications`.
         #[arg(value_hint = ValueHint::Other)]
@@ -407,30 +423,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         shell_actions: vec![],
     };
     match cli.command {
-        Commands::RepoDebug => actions::print_repo_debug_info()?,
-        Commands::Repos { full_path, json } => {
-            actions::list_repositories(context.config, full_path, json)?
-        }
-        Commands::Repo => actions::switch_repo(&mut context)?,
-        Commands::Clone => actions::clone_repo(&mut context)?,
-        Commands::PruneBranches => actions::prune_merged_branches(&context.config)?,
-        Commands::Test { list } => actions::run_test_commands(&mut context, list)?,
-        Commands::Fmt { list } => actions::run_fmt_commands(&mut context, list)?,
-        Commands::Build { list } => actions::run_build_commands(&mut context, list)?,
+        Commands::Repo { command } => match command.unwrap_or(RepoCommands::Cd) {
+            RepoCommands::Cd => actions::switch_repo(&mut context)?,
+            RepoCommands::Debug => actions::print_repo_debug_info()?,
+            RepoCommands::List { full_path, json } => {
+                actions::list_repositories(context.config, full_path, json)?
+            }
+            RepoCommands::Clone => actions::clone_repo(&mut context)?,
+            RepoCommands::Test { list } => actions::run_test_commands(&mut context, list)?,
+            RepoCommands::Fmt { list } => actions::run_fmt_commands(&mut context, list)?,
+            RepoCommands::Build { list } => actions::run_build_commands(&mut context, list)?,
+        },
         Commands::Config => actions::print_config(context.config),
-        Commands::Confirm {
-            prompt: user_prompt,
-            default_true: default,
-        } => {
-            let prompt = user_prompt.unwrap_or("Confirm?".to_string());
-            actions::confirm(&prompt, default)?
-        }
-        Commands::Select {
-            prompt: user_prompt,
-        } => {
-            let prompt = user_prompt.unwrap_or("?".to_string());
-            actions::select(&prompt)?
-        }
+        Commands::Tui { command } => match command {
+            TuiCommands::Confirm {
+                prompt: user_prompt,
+                default_true: default,
+            } => {
+                let prompt = user_prompt.unwrap_or("Confirm?".to_string());
+                actions::confirm(&prompt, default)?
+            }
+            TuiCommands::Select {
+                prompt: user_prompt,
+            } => {
+                let prompt = user_prompt.unwrap_or("?".to_string());
+                actions::select(&prompt)?
+            }
+        },
         Commands::Notes {
             command: notes_command,
         } => match notes_command {

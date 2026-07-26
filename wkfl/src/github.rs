@@ -801,7 +801,12 @@ impl GitHubClient {
         repo: &str,
         pr_number: u64,
         cursor: &str,
-    ) -> Result<Option<(String, crate::gql_queries::pr_details::GraphQLCheckRunConnection)>> {
+    ) -> Result<
+        Option<(
+            String,
+            crate::gql_queries::pr_details::GraphQLCheckRunConnection,
+        )>,
+    > {
         let variables = pr_connection_variables(owner, repo, pr_number, cursor);
         let data: GraphQLPrConnectionPageData<GraphQLPrStatusChecksPage> = self
             .graphql_query(gql_queries::pr_details::STATUS_CHECKS_QUERY, &variables)
