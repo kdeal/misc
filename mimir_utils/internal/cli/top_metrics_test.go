@@ -1,6 +1,28 @@
 package cli
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+)
+
+func TestS3ClientOptions(t *testing.T) {
+	if options := s3ClientOptions(""); options != nil {
+		t.Fatalf("s3ClientOptions(\"\") = %v, want nil", options)
+	}
+
+	options := s3.Options{}
+	for _, apply := range s3ClientOptions("http://minio:9000") {
+		apply(&options)
+	}
+	if got := aws.ToString(options.BaseEndpoint); got != "http://minio:9000" {
+		t.Fatalf("BaseEndpoint = %q, want %q", got, "http://minio:9000")
+	}
+	if !options.UsePathStyle {
+		t.Fatal("UsePathStyle = false, want true")
+	}
+}
 
 func TestHumanReadableBytes(t *testing.T) {
 	tests := []struct {
@@ -16,7 +38,7 @@ func TestHumanReadableBytes(t *testing.T) {
 		{"ten kibibytes", 10 * 1024, "10 KiB"},
 		{"one mebibyte", 1024 * 1024, "1.0 MiB"},
 		{"many gibibytes", 25 * 1024 * 1024 * 1024, "25 GiB"},
-		{"overflow past units", 1 << 62, "4 PiB"},
+		{"one exbibyte", 1 << 62, "4.0 EiB"},
 	}
 
 	for _, tt := range tests {

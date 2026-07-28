@@ -14,7 +14,7 @@ Usage:
   mimir_utils <subcommand> [options]
 
 Available subcommands:
-  top-metrics    Analyze TSDB blocks and print the metrics using the most bytes.
+  top-metrics    Analyze TSDB blocks in S3 and print the metrics using the most bytes.
 
 `)
 }
