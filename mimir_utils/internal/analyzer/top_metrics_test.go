@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"testing"
 
@@ -72,6 +73,25 @@ func TestFindBlockPrefixes(t *testing.T) {
 	}
 }
 
+func TestTopNMetricsSkipsUnreadableBlock(t *testing.T) {
+	client := &fakeS3Client{
+		listOutput: &s3.ListObjectsV2Output{
+			Contents: []types.Object{{Key: aws.String("tenant/meta.json")}},
+		},
+		getErrors: map[string]error{
+			"tenant/index": errors.New("S3 GetObject: SlowDownRead"),
+		},
+	}
+
+	stats, err := TopNMetrics(context.Background(), client, "s3://metrics/tenant")
+	if err != nil {
+		t.Fatalf("TopNMetrics() error = %v", err)
+	}
+	if len(stats) != 0 {
+		t.Fatalf("TopNMetrics() = %v, want no metrics", stats)
+	}
+}
+
 func TestS3ChunkReaderChunk(t *testing.T) {
 	chunk := chunkenc.NewXORChunk()
 	chunkData := chunk.Bytes()
@@ -101,6 +121,7 @@ func TestS3ChunkReaderChunk(t *testing.T) {
 type fakeS3Client struct {
 	listOutput *s3.ListObjectsV2Output
 	headErrors map[string]error
+	getErrors  map[string]error
 }
 
 func (f *fakeS3Client) ListObjectsV2(_ context.Context, _ *s3.ListObjectsV2Input, _ ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
@@ -114,7 +135,10 @@ func (f *fakeS3Client) HeadObject(_ context.Context, input *s3.HeadObjectInput, 
 	return &s3.HeadObjectOutput{}, nil
 }
 
-func (f *fakeS3Client) GetObject(_ context.Context, _ *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+func (f *fakeS3Client) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	if err := f.getErrors[aws.ToString(input.Key)]; err != nil {
+		return nil, err
+	}
 	return nil, nil
 }
 

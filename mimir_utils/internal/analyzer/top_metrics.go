@@ -8,6 +8,7 @@ import (
 	"hash/crc32"
 	"io"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +32,8 @@ type MetricStat struct {
 	Bytes  int64
 	Series int
 	Chunks int
+	// LastRecorded is the latest sample timestamp in Unix milliseconds.
+	LastRecorded int64
 }
 
 type s3Client interface {
@@ -40,7 +43,7 @@ type s3Client interface {
 }
 
 // TopNMetrics reads TSDB blocks from an S3 URI and returns the top metrics by bytes used.
-func TopNMetrics(ctx context.Context, client s3Client, s3URI string, limit int) ([]MetricStat, error) {
+func TopNMetrics(ctx context.Context, client s3Client, s3URI string) ([]MetricStat, error) {
 	bucket, prefix, err := parseS3URI(s3URI)
 	if err != nil {
 		return nil, err
@@ -53,8 +56,22 @@ func TopNMetrics(ctx context.Context, client s3Client, s3URI string, limit int) 
 	}
 
 	for _, blockPrefix := range blockPrefixes {
-		if err := accumulateBlock(ctx, client, bucket, blockPrefix, aggregate); err != nil {
-			return nil, fmt.Errorf("block %s: %w", blockPrefix, err)
+		blockAggregate := map[string]*MetricStat{}
+		if err := accumulateBlock(ctx, client, bucket, blockPrefix, blockAggregate); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping block %s: %v\n", blockPrefix, err)
+			continue
+		}
+		for name, stat := range blockAggregate {
+			if total, ok := aggregate[name]; ok {
+				total.Bytes += stat.Bytes
+				total.Series += stat.Series
+				if stat.Chunks > 0 && (total.Chunks == 0 || stat.LastRecorded > total.LastRecorded) {
+					total.LastRecorded = stat.LastRecorded
+				}
+				total.Chunks += stat.Chunks
+				continue
+			}
+			aggregate[name] = stat
 		}
 	}
 
@@ -69,10 +86,6 @@ func TopNMetrics(ctx context.Context, client s3Client, s3URI string, limit int) 
 		}
 		return stats[i].Bytes > stats[j].Bytes
 	})
-
-	if limit > 0 && len(stats) > limit {
-		stats = stats[:limit]
-	}
 
 	return stats, nil
 }
@@ -196,12 +209,16 @@ func accumulateBlock(ctx context.Context, client s3Client, bucket, blockPrefix s
 		}
 
 		var seriesBytes int64
-		for _, meta := range metas {
+		var lastRecorded int64
+		for i, meta := range metas {
 			chk, _, err := chunkReader.ChunkOrIterable(meta)
 			if err != nil {
 				return fmt.Errorf("read chunk %d: %w", meta.Ref, err)
 			}
 			seriesBytes += int64(len(chk.Bytes()))
+			if i == 0 || meta.MaxTime > lastRecorded {
+				lastRecorded = meta.MaxTime
+			}
 		}
 
 		stat, ok := aggregate[metricName]
@@ -211,6 +228,9 @@ func accumulateBlock(ctx context.Context, client s3Client, bucket, blockPrefix s
 		}
 		stat.Bytes += seriesBytes
 		stat.Series++
+		if len(metas) > 0 && (stat.Chunks == 0 || lastRecorded > stat.LastRecorded) {
+			stat.LastRecorded = lastRecorded
+		}
 		stat.Chunks += len(metas)
 	}
 
