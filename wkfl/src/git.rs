@@ -44,7 +44,7 @@ pub fn get_worktrees(repo: &Repository) -> anyhow::Result<Vec<String>> {
         .worktrees()?
         .into_iter()
         .flatten()
-        .map(|s| s.to_string())
+        .filter_map(|s| s.map(str::to_owned))
         .collect())
 }
 
