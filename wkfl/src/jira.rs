@@ -150,12 +150,19 @@ pub struct JiraClient {
 
 pub const JIRA_MAX_RESULTS_PER_PAGE: u32 = 100;
 
-#[allow(dead_code)]
-pub struct SearchPage {
+struct SearchPage {
     pub issues: Vec<Issue>,
-    pub total: u32,
-    pub start_at: u32,
-    pub max_results: u32,
+    pub next_page_token: Option<String>,
+    pub is_last: bool,
+}
+
+#[derive(Deserialize)]
+struct SearchResponse {
+    issues: Vec<Issue>,
+    #[serde(rename = "nextPageToken")]
+    next_page_token: Option<String>,
+    #[serde(rename = "isLast", default)]
+    is_last: bool,
 }
 
 impl JiraClient {
@@ -227,55 +234,56 @@ impl JiraClient {
 
     /// Search for issues using JQL
     pub fn search_issues(&self, jql: &str, max_results: Option<u32>) -> Result<Vec<Issue>> {
-        let first_page_size = max_results
-            .unwrap_or(JIRA_MAX_RESULTS_PER_PAGE)
-            .min(JIRA_MAX_RESULTS_PER_PAGE);
-        let mut page = self.search_issues_page(jql, 0, first_page_size)?;
-        let total = page.total;
-        let limit = max_results.unwrap_or(total);
-        let mut issues = page.issues;
-        let mut start_at = issues.len() as u32;
-
-        while (issues.len() as u32) < limit && start_at < total {
-            let remaining = limit.saturating_sub(issues.len() as u32);
-            let page_size = remaining.min(JIRA_MAX_RESULTS_PER_PAGE);
-            page = self.search_issues_page(jql, start_at, page_size)?;
-            if page.issues.is_empty() {
-                break;
-            }
-            start_at += page.issues.len() as u32;
-            issues.extend(page.issues);
+        let limit = max_results.unwrap_or(u32::MAX);
+        if limit == 0 {
+            return Ok(Vec::new());
         }
 
+        let mut issues = Vec::new();
+        let mut next_page_token = None;
+
+        loop {
+            let remaining = limit.saturating_sub(issues.len() as u32);
+            let page_size = remaining.min(JIRA_MAX_RESULTS_PER_PAGE);
+            let page = self.search_issues_page(jql, next_page_token.as_deref(), page_size)?;
+            issues.extend(page.issues);
+
+            if issues.len() as u32 >= limit || page.is_last {
+                break;
+            }
+
+            let Some(token) = page.next_page_token else {
+                break;
+            };
+            if next_page_token.as_deref() == Some(token.as_str()) {
+                return Err(anyhow!("Jira search returned the same nextPageToken twice"));
+            }
+            next_page_token = Some(token);
+        }
+
+        issues.truncate(limit as usize);
         Ok(issues)
     }
 
-    pub fn search_issues_page(
+    fn search_issues_page(
         &self,
         jql: &str,
-        start_at: u32,
+        next_page_token: Option<&str>,
         max_results: u32,
     ) -> Result<SearchPage> {
-        let query_params = [
+        let max_results = max_results.to_string();
+        let mut query_params = vec![
             ("jql", jql),
-            ("startAt", &start_at.to_string()),
-            ("maxResults", &max_results.to_string()),
+            ("maxResults", max_results.as_str()),
             ("fields", "summary,description,status,assignee,reporter,created,updated,priority,issuetype,project,comment")
         ];
+        if let Some(token) = next_page_token {
+            query_params.push(("nextPageToken", token));
+        }
 
         let resp = self
             .api_get_with_query(&["search", "jql"], Some(&query_params))
             .with_context(|| format!("Failed to search Jira issues with JQL: {jql}"))?;
-
-        #[derive(Deserialize)]
-        struct SearchResponse {
-            issues: Vec<Issue>,
-            total: u32,
-            #[serde(rename = "startAt")]
-            start_at: u32,
-            #[serde(rename = "maxResults")]
-            max_results: u32,
-        }
 
         let search_response: SearchResponse = resp
             .into_json()
@@ -283,9 +291,8 @@ impl JiraClient {
 
         Ok(SearchPage {
             issues: search_response.issues,
-            total: search_response.total,
-            start_at: search_response.start_at,
-            max_results: search_response.max_results,
+            next_page_token: search_response.next_page_token,
+            is_last: search_response.is_last,
         })
     }
 
@@ -341,6 +348,32 @@ pub fn format_jira_date(date_str: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_search_response_uses_token_pagination_without_total() {
+        let response: SearchResponse = serde_json::from_value(serde_json::json!({
+            "issues": [],
+            "nextPageToken": "next-page",
+            "isLast": false
+        }))
+        .unwrap();
+
+        assert!(response.issues.is_empty());
+        assert_eq!(response.next_page_token.as_deref(), Some("next-page"));
+        assert!(!response.is_last);
+    }
+
+    #[test]
+    fn test_search_response_deserializes_last_page_without_token() {
+        let response: SearchResponse = serde_json::from_value(serde_json::json!({
+            "issues": [],
+            "isLast": true
+        }))
+        .unwrap();
+
+        assert!(response.next_page_token.is_none());
+        assert!(response.is_last);
+    }
 
     #[test]
     fn test_user_deserializes_but_does_not_serialize_pii() {
