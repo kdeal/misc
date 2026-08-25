@@ -1,6 +1,6 @@
 use std::{env, error::Error, io, path::PathBuf};
 
-use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_complete::{generate, Shell};
 use config::{ChatProvider, WebChatProvider};
 use llm::ModelType;
@@ -271,6 +271,113 @@ enum GithubCommands {
         #[arg(value_hint = ValueHint::Other)]
         thread_id: String,
     },
+    /// Create a pending pull request review.
+    #[command(name = "create-review")]
+    CreateReview {
+        /// Pull request number (defaults to the current commit's PR).
+        #[arg(value_hint = ValueHint::Other)]
+        pr_number: Option<u64>,
+        /// Repository as owner/name (defaults to the current repository).
+        #[arg(long, value_hint = ValueHint::Other)]
+        repo: Option<String>,
+    },
+    /// Add a diff comment to a pending pull request review.
+    #[command(name = "add-review-comment")]
+    AddReviewComment {
+        /// ID returned by `create-review`.
+        review_id: u64,
+        /// File path in the pull request diff.
+        path: String,
+        /// Last (or only) line of the comment in the diff.
+        line: u32,
+        /// Comment text; use --body-file for convenient multiline input.
+        #[arg(required_unless_present = "body_file", conflicts_with = "body_file")]
+        body: Option<String>,
+        /// Read comment text from a file, or from stdin when set to `-`.
+        #[arg(long, value_hint = ValueHint::FilePath)]
+        body_file: Option<PathBuf>,
+        /// Pull request number (defaults to the current commit's PR).
+        #[arg(long)]
+        pr_number: Option<u64>,
+        /// Repository as owner/name (defaults to the current repository).
+        #[arg(long, value_hint = ValueHint::Other)]
+        repo: Option<String>,
+        /// Side of the diff containing `line`.
+        #[arg(long, value_enum, default_value_t)]
+        side: DiffSide,
+        /// First line of a multiline diff comment.
+        #[arg(long)]
+        start_line: Option<u32>,
+        /// Side of the diff containing `start-line` (defaults to `side`).
+        #[arg(long, value_enum, requires = "start_line")]
+        start_side: Option<DiffSide>,
+    },
+    /// Add or replace the summary on a pending pull request review.
+    #[command(name = "add-review-summary")]
+    AddReviewSummary {
+        /// ID returned by `create-review`.
+        review_id: u64,
+        /// Summary text; use --body-file for convenient multiline input.
+        #[arg(required_unless_present = "body_file", conflicts_with = "body_file")]
+        body: Option<String>,
+        /// Read summary text from a file, or from stdin when set to `-`.
+        #[arg(long, value_hint = ValueHint::FilePath)]
+        body_file: Option<PathBuf>,
+        /// Pull request number (defaults to the current commit's PR).
+        #[arg(long)]
+        pr_number: Option<u64>,
+        /// Repository as owner/name (defaults to the current repository).
+        #[arg(long, value_hint = ValueHint::Other)]
+        repo: Option<String>,
+    },
+    /// Submit a pending pull request review.
+    #[command(name = "submit-review")]
+    SubmitReview {
+        /// ID returned by `create-review`.
+        review_id: u64,
+        /// Submission disposition.
+        #[arg(value_enum)]
+        event: ReviewEvent,
+        /// Pull request number (defaults to the current commit's PR).
+        #[arg(long)]
+        pr_number: Option<u64>,
+        /// Repository as owner/name (defaults to the current repository).
+        #[arg(long, value_hint = ValueHint::Other)]
+        repo: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+enum DiffSide {
+    Left,
+    #[default]
+    Right,
+}
+
+impl DiffSide {
+    fn as_api_value(self) -> &'static str {
+        match self {
+            Self::Left => "LEFT",
+            Self::Right => "RIGHT",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ReviewEvent {
+    Comment,
+    Approve,
+    RequestChanges,
+}
+
+impl ReviewEvent {
+    fn as_api_value(self) -> &'static str {
+        match self {
+            Self::Comment => "COMMENT",
+            Self::Approve => "APPROVE",
+            Self::RequestChanges => "REQUEST_CHANGES",
+        }
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -576,6 +683,65 @@ fn main() -> Result<(), Box<dyn Error>> {
             )?,
             GithubCommands::MarkThreadDone { thread_id } => actions::mark_notification_thread_done(
                 &thread_id,
+                hostname.as_deref(),
+                &context.config,
+            )?,
+            GithubCommands::CreateReview { pr_number, repo } => actions::create_review(
+                pr_number,
+                repo.as_deref(),
+                hostname.as_deref(),
+                &context.config,
+            )?,
+            GithubCommands::AddReviewComment {
+                review_id,
+                path,
+                line,
+                body,
+                body_file,
+                pr_number,
+                repo,
+                side,
+                start_line,
+                start_side,
+            } => actions::add_review_comment(
+                review_id,
+                &path,
+                line,
+                actions::read_body(body, body_file.as_deref())?,
+                pr_number,
+                repo.as_deref(),
+                side.as_api_value(),
+                start_line,
+                start_side
+                    .map(DiffSide::as_api_value)
+                    .or(start_line.map(|_| side.as_api_value())),
+                hostname.as_deref(),
+                &context.config,
+            )?,
+            GithubCommands::AddReviewSummary {
+                review_id,
+                body,
+                body_file,
+                pr_number,
+                repo,
+            } => actions::add_review_summary(
+                review_id,
+                actions::read_body(body, body_file.as_deref())?,
+                pr_number,
+                repo.as_deref(),
+                hostname.as_deref(),
+                &context.config,
+            )?,
+            GithubCommands::SubmitReview {
+                review_id,
+                event,
+                pr_number,
+                repo,
+            } => actions::submit_review(
+                review_id,
+                event.as_api_value(),
+                pr_number,
+                repo.as_deref(),
                 hostname.as_deref(),
                 &context.config,
             )?,
