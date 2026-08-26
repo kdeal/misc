@@ -783,7 +783,7 @@ pub fn add_review_comment(
 
     let (owner, repo_name, client) = github_repo_context(repo_slug, hostname, config)?;
     let pr_number = resolve_pr_number(pr_number, &client, &owner, &repo_name)?;
-    client.add_pull_request_review_comment(
+    client.add_pull_request_review_thread(
         &owner,
         &repo_name,
         pr_number,
@@ -922,11 +922,24 @@ fn resolve_pr_number(
     let sha = git::get_current_commit_sha(&repo)?;
     let prs = github_client.get_pull_requests_for_commit(owner, repo_name, &sha)?;
 
-    if prs.is_empty() {
-        anyhow::bail!("No pull request found for current commit {sha}");
-    }
+    select_pr_number(&prs, &sha)
+}
 
-    Ok(prs[0].number)
+fn select_pr_number(prs: &[crate::github::PullRequest], sha: &str) -> anyhow::Result<u64> {
+    match prs {
+        [] => anyhow::bail!("No pull request found for current commit {sha}"),
+        [pr] => Ok(pr.number),
+        _ => {
+            let numbers = prs
+                .iter()
+                .map(|pr| format!("#{}", pr.number))
+                .collect::<Vec<_>>()
+                .join(", ");
+            anyhow::bail!(
+                "Multiple pull requests found for current commit {sha}: {numbers}. Specify a pull request number"
+            )
+        }
+    }
 }
 
 fn print_pr_details_markdown(details: &PullRequestDetails) -> anyhow::Result<()> {
@@ -1642,6 +1655,15 @@ mod tests {
     use super::extract_owner_repo_from_url;
     use super::extract_repo_from_url;
     use crate::git::host_from_remote_url;
+    use crate::github::PullRequest;
+
+    fn pull_request(number: u64) -> PullRequest {
+        PullRequest {
+            number,
+            merged_at: None,
+            html_url: format!("https://github.com/owner/repo/pull/{number}"),
+        }
+    }
 
     #[test]
     fn test_host_from_remote_url_github_com() {
@@ -1706,5 +1728,32 @@ mod tests {
         // Missing slash
         let url = "https://github.com/onlyowner";
         assert!(extract_owner_repo_from_url(url).is_err());
+    }
+
+    #[test]
+    fn select_pr_number_returns_the_only_match() {
+        assert_eq!(
+            super::select_pr_number(&[pull_request(42)], "abc").unwrap(),
+            42
+        );
+    }
+
+    #[test]
+    fn select_pr_number_rejects_no_matches() {
+        let error = super::select_pr_number(&[], "abc").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "No pull request found for current commit abc"
+        );
+    }
+
+    #[test]
+    fn select_pr_number_rejects_ambiguous_matches() {
+        let error =
+            super::select_pr_number(&[pull_request(42), pull_request(51)], "abc").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Multiple pull requests found for current commit abc: #42, #51. Specify a pull request number"
+        );
     }
 }

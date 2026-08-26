@@ -21,6 +21,9 @@ use crate::gql_queries::review_comments::{
     GraphQLReviewCommentConnection, GraphQLReviewCommentNode, GraphQLReviewCommentsData,
     GraphQLReviewCommentsVariables, GraphQLReviewThreadConnection, GraphQLReviewThreadNode,
 };
+use crate::gql_queries::review_mutations::{
+    GraphQLAddReviewThreadData, GraphQLAddReviewThreadInput, GraphQLAddReviewThreadVariables,
+};
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -30,6 +33,7 @@ use url::Url;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequestReview {
     pub id: u64,
+    pub node_id: String,
     pub state: String,
     pub body: Option<String>,
     pub html_url: String,
@@ -334,8 +338,8 @@ impl GitHubClient {
         .with_context(|| "Failed to parse GitHub review response as JSON")
     }
 
-    /// Add a single- or multi-line diff comment to a pending review.
-    pub fn add_pull_request_review_comment(
+    /// Add a single- or multi-line diff thread to a pending review.
+    pub fn add_pull_request_review_thread(
         &self,
         owner: &str,
         repo: &str,
@@ -343,9 +347,8 @@ impl GitHubClient {
         review_id: u64,
         comment: &NewReviewComment<'_>,
     ) -> Result<()> {
-        self.api_send_json(
-            "POST",
-            &[
+        let review: PullRequestReview = self
+            .api_get(&[
                 "repos",
                 owner,
                 repo,
@@ -353,10 +356,44 @@ impl GitHubClient {
                 &pr_number.to_string(),
                 "reviews",
                 &review_id.to_string(),
-                "comments",
-            ],
-            comment,
-        )?;
+            ])?
+            .into_json()
+            .with_context(|| "Failed to parse GitHub review response as JSON")?;
+        if review.state != "PENDING" {
+            anyhow::bail!(
+                "Review {review_id} is not pending (state: {})",
+                review.state
+            );
+        }
+
+        let variables = GraphQLAddReviewThreadVariables {
+            input: GraphQLAddReviewThreadInput {
+                body: comment.body,
+                path: comment.path,
+                line: comment.line,
+                side: comment.side,
+                pull_request_review_id: &review.node_id,
+                start_line: comment.start_line,
+                start_side: comment.start_side,
+                subject_type: "LINE",
+            },
+        };
+        let data: GraphQLAddReviewThreadData = self
+            .graphql_query(
+                gql_queries::review_mutations::ADD_REVIEW_THREAD_MUTATION,
+                &variables,
+            )
+            .with_context(|| {
+                format!("Failed to add a review thread to pending review {review_id}")
+            })?;
+        let thread = data
+            .add_pull_request_review_thread
+            .and_then(|payload| payload.thread)
+            .ok_or_else(|| anyhow!("GitHub GraphQL response missing the created review thread"))?;
+        if thread.id.is_empty() {
+            anyhow::bail!("GitHub GraphQL response returned an empty review thread ID");
+        }
+
         Ok(())
     }
 
