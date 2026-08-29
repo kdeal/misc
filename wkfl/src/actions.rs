@@ -3,7 +3,9 @@ use log::info;
 use serde::Serialize;
 use std::fs;
 use std::io;
+use std::io::Read;
 use std::io::Write;
+use std::path::Path;
 
 use crate::config::get_repo_config;
 use crate::config::resolve_secret;
@@ -13,7 +15,7 @@ use crate::config::WebChatProvider;
 use crate::git::{self, extract_owner_repo_from_url, extract_repo_from_url};
 use crate::github::{
     create_github_client, create_github_client_for_host, is_bot_user, GitHubClient, IssueComment,
-    Notification, PrComments, PrToReview, PullRequestDetails, ReviewComment,
+    NewReviewComment, Notification, PrComments, PrToReview, PullRequestDetails, ReviewComment,
 };
 use crate::jira::{create_jira_client, format_jira_date};
 use crate::llm;
@@ -726,6 +728,110 @@ pub fn mark_notification_thread_done(
     Ok(())
 }
 
+/// Read command text either directly, from a file, or from stdin (`--body-file -`).
+pub fn read_body(body: Option<String>, body_file: Option<&Path>) -> anyhow::Result<String> {
+    if let Some(body) = body {
+        return Ok(body);
+    }
+
+    let path = body_file.ok_or_else(|| anyhow!("A body or --body-file is required"))?;
+    if path == Path::new("-") {
+        let mut body = String::new();
+        io::stdin().read_to_string(&mut body)?;
+        return Ok(body);
+    }
+    fs::read_to_string(path)
+        .map_err(Into::into)
+        .map_err(|error: anyhow::Error| error.context(format!("Failed to read {}", path.display())))
+}
+
+pub fn create_review(
+    pr_number: Option<u64>,
+    repo_slug: Option<&str>,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let (owner, repo_name, client) = github_repo_context(repo_slug, hostname, config)?;
+    let pr_number = resolve_pr_number(pr_number, &client, &owner, &repo_name)?;
+    let review = client.create_pull_request_review(&owner, &repo_name, pr_number)?;
+    println!("{}", review.id);
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn add_review_comment(
+    review_id: u64,
+    path: &str,
+    line: u32,
+    body: String,
+    pr_number: Option<u64>,
+    repo_slug: Option<&str>,
+    side: &str,
+    start_line: Option<u32>,
+    start_side: Option<&str>,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    if line == 0 || start_line == Some(0) {
+        anyhow::bail!("Review comment line numbers must be greater than zero");
+    }
+    if let Some(start_line) = start_line {
+        if start_line > line {
+            anyhow::bail!("--start-line cannot be greater than line");
+        }
+    }
+
+    let (owner, repo_name, client) = github_repo_context(repo_slug, hostname, config)?;
+    let pr_number = resolve_pr_number(pr_number, &client, &owner, &repo_name)?;
+    client.add_pull_request_review_thread(
+        &owner,
+        &repo_name,
+        pr_number,
+        review_id,
+        &NewReviewComment {
+            body: &body,
+            path,
+            line,
+            side,
+            start_line,
+            start_side,
+        },
+    )?;
+    println!("Added comment to review {review_id}");
+    Ok(())
+}
+
+pub fn add_review_summary(
+    review_id: u64,
+    body: String,
+    pr_number: Option<u64>,
+    repo_slug: Option<&str>,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let (owner, repo_name, client) = github_repo_context(repo_slug, hostname, config)?;
+    let pr_number = resolve_pr_number(pr_number, &client, &owner, &repo_name)?;
+    client.update_pull_request_review_summary(&owner, &repo_name, pr_number, review_id, &body)?;
+    println!("Updated summary for review {review_id}");
+    Ok(())
+}
+
+pub fn submit_review(
+    review_id: u64,
+    event: &str,
+    pr_number: Option<u64>,
+    repo_slug: Option<&str>,
+    hostname: Option<&str>,
+    config: &Config,
+) -> anyhow::Result<()> {
+    let (owner, repo_name, client) = github_repo_context(repo_slug, hostname, config)?;
+    let pr_number = resolve_pr_number(pr_number, &client, &owner, &repo_name)?;
+    let review =
+        client.submit_pull_request_review(&owner, &repo_name, pr_number, review_id, event)?;
+    println!("Submitted review {} as {}", review.id, review.state);
+    Ok(())
+}
+
 fn github_client_for_remote(
     remote_url: &str,
     hostname: Option<&str>,
@@ -816,11 +922,24 @@ fn resolve_pr_number(
     let sha = git::get_current_commit_sha(&repo)?;
     let prs = github_client.get_pull_requests_for_commit(owner, repo_name, &sha)?;
 
-    if prs.is_empty() {
-        anyhow::bail!("No pull request found for current commit {sha}");
-    }
+    select_pr_number(&prs, &sha)
+}
 
-    Ok(prs[0].number)
+fn select_pr_number(prs: &[crate::github::PullRequest], sha: &str) -> anyhow::Result<u64> {
+    match prs {
+        [] => anyhow::bail!("No pull request found for current commit {sha}"),
+        [pr] => Ok(pr.number),
+        _ => {
+            let numbers = prs
+                .iter()
+                .map(|pr| format!("#{}", pr.number))
+                .collect::<Vec<_>>()
+                .join(", ");
+            anyhow::bail!(
+                "Multiple pull requests found for current commit {sha}: {numbers}. Specify a pull request number"
+            )
+        }
+    }
 }
 
 fn print_pr_details_markdown(details: &PullRequestDetails) -> anyhow::Result<()> {
@@ -1536,6 +1655,15 @@ mod tests {
     use super::extract_owner_repo_from_url;
     use super::extract_repo_from_url;
     use crate::git::host_from_remote_url;
+    use crate::github::PullRequest;
+
+    fn pull_request(number: u64) -> PullRequest {
+        PullRequest {
+            number,
+            merged_at: None,
+            html_url: format!("https://github.com/owner/repo/pull/{number}"),
+        }
+    }
 
     #[test]
     fn test_host_from_remote_url_github_com() {
@@ -1600,5 +1728,32 @@ mod tests {
         // Missing slash
         let url = "https://github.com/onlyowner";
         assert!(extract_owner_repo_from_url(url).is_err());
+    }
+
+    #[test]
+    fn select_pr_number_returns_the_only_match() {
+        assert_eq!(
+            super::select_pr_number(&[pull_request(42)], "abc").unwrap(),
+            42
+        );
+    }
+
+    #[test]
+    fn select_pr_number_rejects_no_matches() {
+        let error = super::select_pr_number(&[], "abc").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "No pull request found for current commit abc"
+        );
+    }
+
+    #[test]
+    fn select_pr_number_rejects_ambiguous_matches() {
+        let error =
+            super::select_pr_number(&[pull_request(42), pull_request(51)], "abc").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Multiple pull requests found for current commit abc: #42, #51. Specify a pull request number"
+        );
     }
 }
