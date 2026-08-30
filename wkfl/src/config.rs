@@ -83,6 +83,8 @@ pub struct OllamaConfig {
 pub struct Config {
     #[serde(default = "default_repo_base_dir")]
     repositories_directory: String,
+    #[serde(default = "default_workspace_base_dir")]
+    workspaces_directory: String,
     notes_directory: Option<String>,
     web_chat_provider: Option<WebChatProvider>,
     chat_provider: Option<ChatProvider>,
@@ -126,6 +128,9 @@ impl RepoConfig {
 impl Config {
     pub fn repositories_directory_path(&self) -> anyhow::Result<PathBuf> {
         create_path_from_string(&self.repositories_directory)
+    }
+    pub fn workspaces_directory_path(&self) -> anyhow::Result<PathBuf> {
+        create_path_from_string(&self.workspaces_directory)
     }
     pub fn notes_directory_path(&self) -> anyhow::Result<PathBuf> {
         if let Some(notes_directory) = &self.notes_directory {
@@ -175,6 +180,10 @@ impl Config {
 
 fn default_repo_base_dir() -> String {
     "~/repos/".to_string()
+}
+
+fn default_workspace_base_dir() -> String {
+    "~/workspaces/".to_string()
 }
 
 pub(crate) fn default_ollama_base_url() -> String {

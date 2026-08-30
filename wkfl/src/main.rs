@@ -19,6 +19,7 @@ mod repositories;
 mod shell_actions;
 mod todo;
 mod utils;
+mod workspaces;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -40,6 +41,11 @@ enum Commands {
     Repo {
         #[command(subcommand)]
         command: Option<RepoCommands>,
+    },
+    /// Create and manage Jujutsu workspaces.
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommands,
     },
     /// Print the currently resolved wkfl configuration.
     Config,
@@ -141,6 +147,32 @@ enum RepoCommands {
         /// List configured commands without executing them.
         #[arg(long)]
         list: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum WorkspaceCommands {
+    /// Create a randomly named workspace for a repository.
+    Create {
+        /// Repository path relative to the configured repositories directory.
+        /// Defaults to the repository containing the current directory.
+        #[arg(value_hint = ValueHint::DirPath)]
+        repo: Option<PathBuf>,
+    },
+    /// List workspaces in the configured workspaces directory.
+    List {
+        /// Show absolute paths instead of namespace/repository/workspace names.
+        #[arg(short, long)]
+        full_path: bool,
+        /// Output workspaces as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Forget and delete a workspace.
+    Remove {
+        /// Workspace path relative to the workspace directory.
+        #[arg(value_hint = ValueHint::DirPath)]
+        workspace: PathBuf,
     },
 }
 
@@ -433,6 +465,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             RepoCommands::Test { list } => actions::run_test_commands(&mut context, list)?,
             RepoCommands::Fmt { list } => actions::run_fmt_commands(&mut context, list)?,
             RepoCommands::Build { list } => actions::run_build_commands(&mut context, list)?,
+        },
+        Commands::Workspace { command } => match command {
+            WorkspaceCommands::Create { repo } => {
+                workspaces::create(&mut context, repo.as_deref())?
+            }
+            WorkspaceCommands::List { full_path, json } => {
+                workspaces::list(&context.config, full_path, json)?
+            }
+            WorkspaceCommands::Remove { workspace } => {
+                workspaces::remove(&context.config, &workspace)?
+            }
         },
         Commands::Config => actions::print_config(context.config),
         Commands::Tui { command } => match command {
