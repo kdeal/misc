@@ -21,7 +21,9 @@ notes_directory = "~/notes"
 
 Workspaces created with `wkfl workspace create [namespace/repository]` use the layout
 `<workspaces_directory>/<namespace>/<repository>/<random-adjective>-<random-noun>/`. If the
-repository argument is omitted, wkfl uses the repository containing the current directory.
+repository argument is omitted, wkfl uses the repository containing the current directory. The
+same optional repository argument and inference apply to `wkfl workspace list`, which only lists
+workspaces belonging to the resolved repository.
 
 ### Chat provider selection
 

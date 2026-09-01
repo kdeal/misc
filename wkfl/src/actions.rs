@@ -34,6 +34,7 @@ use crate::prompts::Link;
 use crate::repositories::get_repositories_in_directory;
 use crate::shell_actions::ShellAction;
 use crate::utils;
+use crate::workspaces;
 use crate::Context;
 
 #[derive(Serialize)]
@@ -46,6 +47,12 @@ struct RepositoriesOutput {
 struct CloneRepoOutput {
     name: String,
     directory: String,
+}
+
+#[derive(Serialize)]
+struct WorkspacesOutput {
+    base_directory: String,
+    workspaces: Vec<String>,
 }
 
 pub fn list_repositories(config: Config, full_path: bool, json: bool) -> anyhow::Result<()> {
@@ -79,6 +86,55 @@ pub fn list_repositories(config: Config, full_path: bool, json: bool) -> anyhow:
 
     Ok(())
 }
+
+pub fn create_workspace(
+    context: &mut Context,
+    requested_repo: Option<&Path>,
+) -> anyhow::Result<()> {
+    let destination = workspaces::create(&context.config, requested_repo)?;
+    println!("{}", destination.display());
+    context
+        .shell_actions
+        .push(ShellAction::Cd { path: destination });
+    Ok(())
+}
+
+pub fn list_workspaces(
+    config: &Config,
+    requested_repo: Option<&Path>,
+    full_path: bool,
+    json: bool,
+) -> anyhow::Result<()> {
+    let base = config.workspaces_directory_path()?;
+    let workspace_paths = workspaces::list(config, requested_repo)?;
+    let workspaces = workspace_paths
+        .into_iter()
+        .map(|path| {
+            if full_path {
+                Ok(path.display().to_string())
+            } else {
+                Ok(path.strip_prefix(&base)?.display().to_string())
+            }
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    if json {
+        return print_json(&WorkspacesOutput {
+            base_directory: base.display().to_string(),
+            workspaces,
+        });
+    }
+
+    for workspace in workspaces {
+        println!("{workspace}");
+    }
+    Ok(())
+}
+
+pub fn remove_workspace(config: &Config, workspace: &Path) -> anyhow::Result<()> {
+    workspaces::remove(config, workspace)
+}
+
 pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
     let base_repo_path = context.config.repositories_directory_path()?;
     let repo_paths = get_repositories_in_directory(&base_repo_path)?;

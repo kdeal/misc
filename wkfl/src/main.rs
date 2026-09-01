@@ -166,8 +166,12 @@ enum WorkspaceCommands {
         #[arg(value_hint = ValueHint::DirPath)]
         repo: Option<PathBuf>,
     },
-    /// List workspaces in the configured workspaces directory.
+    /// List workspaces for a repository.
     List {
+        /// Repository path relative to the configured repositories directory.
+        /// Defaults to the repository containing the current directory.
+        #[arg(value_hint = ValueHint::DirPath)]
+        repo: Option<PathBuf>,
         /// Show absolute paths instead of namespace/repository/workspace names.
         #[arg(short, long)]
         full_path: bool,
@@ -582,13 +586,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
         Commands::Workspace { command } => match command {
             WorkspaceCommands::Create { repo } => {
-                workspaces::create(&mut context, repo.as_deref())?
+                actions::create_workspace(&mut context, repo.as_deref())?
             }
-            WorkspaceCommands::List { full_path, json } => {
-                workspaces::list(&context.config, full_path, json)?
-            }
+            WorkspaceCommands::List {
+                repo,
+                full_path,
+                json,
+            } => actions::list_workspaces(&context.config, repo.as_deref(), full_path, json)?,
             WorkspaceCommands::Remove { workspace } => {
-                workspaces::remove(&context.config, &workspace)?
+                actions::remove_workspace(&context.config, &workspace)?
             }
         },
         Commands::Config => actions::print_config(context.config),
@@ -844,4 +850,38 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_list_accepts_an_optional_repository() {
+        let cli = Cli::try_parse_from(["wkfl", "workspace", "list", "owner/repo"]).unwrap();
+        let Commands::Workspace {
+            command:
+                WorkspaceCommands::List {
+                    repo,
+                    full_path,
+                    json,
+                },
+        } = cli.command
+        else {
+            panic!("expected workspace list command");
+        };
+
+        assert_eq!(repo, Some(PathBuf::from("owner/repo")));
+        assert!(!full_path);
+        assert!(!json);
+
+        let cli = Cli::try_parse_from(["wkfl", "workspace", "list"]).unwrap();
+        let Commands::Workspace {
+            command: WorkspaceCommands::List { repo, .. },
+        } = cli.command
+        else {
+            panic!("expected workspace list command");
+        };
+        assert_eq!(repo, None);
+    }
 }
