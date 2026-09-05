@@ -10,17 +10,6 @@ steps:
           image: "ghcr.io/kdeal/devenv-ci"
           propagate-uid-gid: true
 
-  - label: ":swift: Swift CI (Linux)"
-    key: "wkfl_swift_linux"
-    command: |
-      cd wkfl_swift
-      just ci
-    if_changed: "{wkfl_swift/**,.buildkite/pipeline.yaml}"
-    plugins:
-      - docker#v5.13.0:
-          image: "ghcr.io/kdeal/devenv-ci"
-          propagate-uid-gid: true
-
   - label: ":rust: Rust CI"
     key: "wkfl_rust"
     command: |
