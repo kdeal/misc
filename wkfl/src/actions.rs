@@ -42,6 +42,12 @@ struct RepositoriesOutput {
     repos: Vec<String>,
 }
 
+#[derive(Serialize)]
+struct CloneRepoOutput {
+    name: String,
+    directory: String,
+}
+
 pub fn list_repositories(config: Config, full_path: bool, json: bool) -> anyhow::Result<()> {
     let base_repo_path = config.repositories_directory_path()?;
     let repo_paths = get_repositories_in_directory(&base_repo_path)?;
@@ -93,17 +99,32 @@ pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn clone_repo(context: &mut Context) -> anyhow::Result<()> {
-    let repo_url = basic_prompt("Clone Url:")?;
+pub fn clone_repo(
+    context: &mut Context,
+    repo_url: Option<String>,
+    json: bool,
+) -> anyhow::Result<()> {
+    let repo_url = match repo_url {
+        Some(url) => url,
+        None => basic_prompt("Clone Url:")?,
+    };
     let repo = extract_repo_from_url(&repo_url)?;
 
-    let repo_path = context.config.repositories_directory_path()?.join(repo);
+    let repo_path = context.config.repositories_directory_path()?.join(&repo);
     fs::create_dir_all(&repo_path)?;
 
     git::clone_repo(&repo_url, &repo_path)?;
-    context
-        .shell_actions
-        .push(ShellAction::Cd { path: repo_path });
+    context.shell_actions.push(ShellAction::Cd {
+        path: repo_path.clone(),
+    });
+
+    if json {
+        print_json(&CloneRepoOutput {
+            name: repo,
+            directory: repo_path.display().to_string(),
+        })?;
+    }
+
     Ok(())
 }
 
@@ -1654,8 +1675,26 @@ pub fn search_jira_issues_by_filter(
 mod tests {
     use super::extract_owner_repo_from_url;
     use super::extract_repo_from_url;
+    use super::CloneRepoOutput;
     use crate::git::host_from_remote_url;
     use crate::github::PullRequest;
+
+    #[test]
+    fn clone_repo_output_has_name_and_directory() {
+        let output = serde_json::to_value(CloneRepoOutput {
+            name: "kdeal/misc".to_string(),
+            directory: "/repos/kdeal/misc".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(
+            output,
+            serde_json::json!({
+                "name": "kdeal/misc",
+                "directory": "/repos/kdeal/misc",
+            })
+        );
+    }
 
     fn pull_request(number: u64) -> PullRequest {
         PullRequest {

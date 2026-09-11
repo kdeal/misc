@@ -123,7 +123,14 @@ enum RepoCommands {
         json: bool,
     },
     /// Clone a repository into the repositories directory.
-    Clone,
+    Clone {
+        /// Repository URL (prompts interactively if omitted).
+        #[arg(value_hint = ValueHint::Url)]
+        url: Option<String>,
+        /// Output details about the cloned repository as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Run test commands defined in the repository configuration.
     Test {
         /// List configured commands without executing them.
@@ -536,7 +543,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             RepoCommands::List { full_path, json } => {
                 actions::list_repositories(context.config, full_path, json)?
             }
-            RepoCommands::Clone => actions::clone_repo(&mut context)?,
+            RepoCommands::Clone { url, json } => actions::clone_repo(&mut context, url, json)?,
             RepoCommands::Test { list } => actions::run_test_commands(&mut context, list)?,
             RepoCommands::Fmt { list } => actions::run_fmt_commands(&mut context, list)?,
             RepoCommands::Build { list } => actions::run_build_commands(&mut context, list)?,
