@@ -160,7 +160,10 @@ query PrDetails(
                                         name
                                         status
                                         conclusion
-                                        detailsUrl
+                                        url
+                                        output {
+                                            title
+                                        }
                                     }
                                     ... on StatusContext {
                                         context

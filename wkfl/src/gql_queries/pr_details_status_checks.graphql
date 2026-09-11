@@ -14,7 +14,10 @@ query PrDetailsStatusChecks($owner: String!, $name: String!, $prNumber: Int!, $c
                                         name
                                         status
                                         conclusion
-                                        detailsUrl
+                                        url
+                                        output {
+                                            title
+                                        }
                                     }
                                     ... on StatusContext {
                                         context

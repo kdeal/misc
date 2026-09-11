@@ -1044,9 +1044,9 @@ fn print_pr_details_markdown(details: &PullRequestDetails) -> anyhow::Result<()>
                 let name = json_str(run, "name").unwrap_or("(unnamed)");
                 let status = json_str(run, "status").unwrap_or("unknown");
                 let conclusion = json_str(run, "conclusion").unwrap_or("none");
-                let details_url = json_str(run, "details_url");
-                if let Some(details_url) = details_url.filter(|url| !url.is_empty()) {
-                    println!("- {}: {} / {} ({})", name, status, conclusion, details_url);
+                let html_url = json_str(run, "html_url");
+                if let Some(html_url) = html_url.filter(|url| !url.is_empty()) {
+                    println!("- {}: {} / {} ({})", name, status, conclusion, html_url);
                 } else {
                     println!("- {}: {} / {}", name, status, conclusion);
                 }

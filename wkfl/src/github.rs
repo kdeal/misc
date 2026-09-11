@@ -1383,7 +1383,10 @@ fn check_run_value(run: &GraphQLCheckRunNode) -> Value {
         "name": run.name.as_deref().unwrap_or("(unnamed)"),
         "status": run.status.as_ref().map(|status| status.to_lowercase()).unwrap_or_else(|| "unknown".to_string()),
         "conclusion": run.conclusion.as_ref().map(|conclusion| conclusion.to_lowercase()),
-        "details_url": run.details_url,
+        "html_url": run.url,
+        "output": run.output.as_ref().map(|output| json!({
+            "title": output.title,
+        })),
     })
 }
 
@@ -1453,4 +1456,33 @@ pub fn create_github_client_for_host(host: &str, config: &Config) -> anyhow::Res
 
 pub fn is_bot_user(user_login: &str, user_type: &str) -> bool {
     user_type == "Bot" || user_login.starts_with("service") || user_login.ends_with("[bot]")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_run_value;
+    use crate::gql_queries::pr_details::{GraphQLCheckRunNode, GraphQLCheckRunOutput};
+
+    #[test]
+    fn check_run_value_includes_output_title_and_html_url() {
+        let run = GraphQLCheckRunNode {
+            typename: "CheckRun".to_string(),
+            name: Some("tests".to_string()),
+            status: Some("COMPLETED".to_string()),
+            conclusion: Some("SUCCESS".to_string()),
+            url: Some("https://github.com/owner/repo/runs/1".to_string()),
+            output: Some(GraphQLCheckRunOutput {
+                title: Some("All tests passed".to_string()),
+            }),
+            context: None,
+            state: None,
+            description: None,
+            target_url: None,
+        };
+
+        let value = check_run_value(&run);
+        assert_eq!(value["output"]["title"], "All tests passed");
+        assert_eq!(value["html_url"], "https://github.com/owner/repo/runs/1");
+        assert!(value.get("details_url").is_none());
+    }
 }
