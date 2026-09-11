@@ -317,15 +317,10 @@ pub struct GraphQLCheckRunNode {
     pub status: Option<String>,
     pub conclusion: Option<String>,
     pub url: Option<String>,
-    pub output: Option<GraphQLCheckRunOutput>,
+    pub title: Option<String>,
     pub context: Option<String>,
     pub state: Option<String>,
     pub description: Option<String>,
     #[serde(rename = "targetUrl")]
     pub target_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GraphQLCheckRunOutput {
-    pub title: Option<String>,
 }
