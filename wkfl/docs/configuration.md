@@ -19,7 +19,7 @@ workspaces_directory = "~/workspaces/"
 notes_directory = "~/notes" 
 ```
 
-Workspaces created with `wkfl workspace create [namespace/repository] [workspace-name]` use the
+Workspaces created with `wkfl workspace create [namespace/repository] [--name workspace-name]` use the
 layout `<workspaces_directory>/<namespace>/<repository>/<workspace-name>/`. If the workspace name
 is omitted, wkfl generates a random adjective-noun name. If the repository argument is omitted,
 wkfl uses the repository containing the current directory. The same optional repository argument

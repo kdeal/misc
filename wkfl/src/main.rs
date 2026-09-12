@@ -166,7 +166,7 @@ enum WorkspaceCommands {
         #[arg(value_hint = ValueHint::DirPath)]
         repo: Option<PathBuf>,
         /// Workspace name. Defaults to a randomly generated name.
-        #[arg(value_hint = ValueHint::Other)]
+        #[arg(long, value_hint = ValueHint::Other)]
         name: Option<String>,
     },
     /// List workspaces for a repository.

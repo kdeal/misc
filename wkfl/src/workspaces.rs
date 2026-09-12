@@ -157,6 +157,17 @@ pub fn remove(config: &Config, relative: &Path) -> anyhow::Result<()> {
         bail!("workspace does not exist: {}", destination.display());
     }
     let output = Command::new("jj")
+        .arg("status")
+        .current_dir(&destination)
+        .output()
+        .context("failed to execute 'jj status' - ensure jj is installed")?;
+    if !output.status.success() {
+        bail!(
+            "jj status failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let output = Command::new("jj")
         .args(["workspace", "forget"])
         .arg(name)
         .current_dir(config.repositories_directory_path()?.join(repo_relative))
