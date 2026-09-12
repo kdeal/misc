@@ -1,6 +1,6 @@
 use std::{
     env, fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::Command,
 };
 
@@ -81,15 +81,31 @@ fn random_name() -> String {
     )
 }
 
-pub fn create(config: &Config, requested_repo: Option<&Path>) -> anyhow::Result<PathBuf> {
+pub fn create(
+    config: &Config,
+    requested_repo: Option<&Path>,
+    requested_name: Option<&str>,
+) -> anyhow::Result<PathBuf> {
     let (repo, relative_repo) = repository(config, requested_repo)?;
     let parent = config.workspaces_directory_path()?.join(relative_repo);
     fs::create_dir_all(&parent)?;
-    let (name, destination) = (0..100)
-        .map(|_| random_name())
-        .map(|name| (name.clone(), parent.join(name)))
-        .find(|(_, destination)| !destination.exists())
-        .context("could not generate an unused workspace name")?;
+    let (name, destination) = if let Some(name) = requested_name {
+        let mut components = Path::new(name).components();
+        if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
+            bail!("workspace name must be a single path component");
+        }
+        let destination = parent.join(name);
+        if destination.exists() {
+            bail!("workspace already exists: {}", destination.display());
+        }
+        (name.to_owned(), destination)
+    } else {
+        (0..100)
+            .map(|_| random_name())
+            .map(|name| (name.clone(), parent.join(name)))
+            .find(|(_, destination)| !destination.exists())
+            .context("could not generate an unused workspace name")?
+    };
     let output = Command::new("jj")
         .args(["workspace", "add", "--name", &name])
         .arg(&destination)

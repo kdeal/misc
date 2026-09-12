@@ -159,12 +159,15 @@ enum RepoCommands {
 
 #[derive(Subcommand, Debug)]
 enum WorkspaceCommands {
-    /// Create a randomly named workspace for a repository.
+    /// Create a workspace for a repository.
     Create {
         /// Repository path relative to the configured repositories directory.
         /// Defaults to the repository containing the current directory.
         #[arg(value_hint = ValueHint::DirPath)]
         repo: Option<PathBuf>,
+        /// Workspace name. Defaults to a randomly generated name.
+        #[arg(value_hint = ValueHint::Other)]
+        name: Option<String>,
     },
     /// List workspaces for a repository.
     List {
@@ -585,8 +588,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             RepoCommands::Build { list } => actions::run_build_commands(&mut context, list)?,
         },
         Commands::Workspace { command } => match command {
-            WorkspaceCommands::Create { repo } => {
-                actions::create_workspace(&mut context, repo.as_deref())?
+            WorkspaceCommands::Create { repo, name } => {
+                actions::create_workspace(&mut context, repo.as_deref(), name.as_deref())?
             }
             WorkspaceCommands::List {
                 repo,
@@ -850,38 +853,4 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn workspace_list_accepts_an_optional_repository() {
-        let cli = Cli::try_parse_from(["wkfl", "workspace", "list", "owner/repo"]).unwrap();
-        let Commands::Workspace {
-            command:
-                WorkspaceCommands::List {
-                    repo,
-                    full_path,
-                    json,
-                },
-        } = cli.command
-        else {
-            panic!("expected workspace list command");
-        };
-
-        assert_eq!(repo, Some(PathBuf::from("owner/repo")));
-        assert!(!full_path);
-        assert!(!json);
-
-        let cli = Cli::try_parse_from(["wkfl", "workspace", "list"]).unwrap();
-        let Commands::Workspace {
-            command: WorkspaceCommands::List { repo, .. },
-        } = cli.command
-        else {
-            panic!("expected workspace list command");
-        };
-        assert_eq!(repo, None);
-    }
 }

@@ -90,8 +90,9 @@ pub fn list_repositories(config: Config, full_path: bool, json: bool) -> anyhow:
 pub fn create_workspace(
     context: &mut Context,
     requested_repo: Option<&Path>,
+    requested_name: Option<&str>,
 ) -> anyhow::Result<()> {
-    let destination = workspaces::create(&context.config, requested_repo)?;
+    let destination = workspaces::create(&context.config, requested_repo, requested_name)?;
     println!("{}", destination.display());
     context
         .shell_actions

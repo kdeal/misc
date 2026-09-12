@@ -19,11 +19,12 @@ workspaces_directory = "~/workspaces/"
 notes_directory = "~/notes" 
 ```
 
-Workspaces created with `wkfl workspace create [namespace/repository]` use the layout
-`<workspaces_directory>/<namespace>/<repository>/<random-adjective>-<random-noun>/`. If the
-repository argument is omitted, wkfl uses the repository containing the current directory. The
-same optional repository argument and inference apply to `wkfl workspace list`, which only lists
-workspaces belonging to the resolved repository.
+Workspaces created with `wkfl workspace create [namespace/repository] [workspace-name]` use the
+layout `<workspaces_directory>/<namespace>/<repository>/<workspace-name>/`. If the workspace name
+is omitted, wkfl generates a random adjective-noun name. If the repository argument is omitted,
+wkfl uses the repository containing the current directory. The same optional repository argument
+and inference apply to `wkfl workspace list`, which only lists workspaces belonging to the resolved
+repository.
 
 ### Chat provider selection
 
