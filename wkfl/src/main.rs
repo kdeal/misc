@@ -597,7 +597,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 json,
             } => actions::list_workspaces(&context.config, repo.as_deref(), full_path, json)?,
             WorkspaceCommands::Remove { workspace } => {
-                actions::remove_workspace(&context.config, &workspace)?
+                actions::remove_workspace(&mut context, &workspace)?
             }
         },
         Commands::Config => actions::print_config(context.config),

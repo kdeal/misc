@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use log::info;
 use serde::Serialize;
+use std::env;
 use std::fs;
 use std::io;
 use std::io::Read;
@@ -132,8 +133,34 @@ pub fn list_workspaces(
     Ok(())
 }
 
-pub fn remove_workspace(config: &Config, workspace: &Path) -> anyhow::Result<()> {
-    workspaces::remove(config, workspace)
+fn workspace_cd_destination(
+    current_dir: &Path,
+    removed_workspace: &Path,
+    source_repository: &Path,
+) -> Option<std::path::PathBuf> {
+    current_dir
+        .starts_with(removed_workspace)
+        .then(|| source_repository.to_owned())
+}
+
+pub fn remove_workspace(context: &mut Context, workspace: &Path) -> anyhow::Result<()> {
+    let current_dir = env::current_dir()?.canonicalize()?;
+    let removed_workspace = workspaces::remove(&context.config, workspace)?;
+    let repo_relative = workspace
+        .parent()
+        .ok_or_else(|| anyhow!("repository path is missing"))?;
+    let source_repository = context
+        .config
+        .repositories_directory_path()?
+        .join(repo_relative);
+    if let Some(source_repository) =
+        workspace_cd_destination(&current_dir, &removed_workspace, &source_repository)
+    {
+        context.shell_actions.push(ShellAction::Cd {
+            path: source_repository,
+        });
+    }
+    Ok(())
 }
 
 pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
@@ -1750,6 +1777,33 @@ mod tests {
                 "name": "kdeal/misc",
                 "directory": "/repos/kdeal/misc",
             })
+        );
+    }
+
+    #[test]
+    fn selects_source_repository_when_removed_workspace_was_active() {
+        let workspace = std::path::Path::new("/workspaces/owner/repo/calm-otter");
+        let source_repository = std::path::Path::new("/repos/owner/repo");
+
+        assert_eq!(
+            super::workspace_cd_destination(workspace, workspace, source_repository),
+            Some(source_repository.to_owned())
+        );
+        assert_eq!(
+            super::workspace_cd_destination(
+                &workspace.join("src/module"),
+                workspace,
+                source_repository
+            ),
+            Some(source_repository.to_owned())
+        );
+        assert_eq!(
+            super::workspace_cd_destination(
+                std::path::Path::new("/workspaces/owner/repo/other"),
+                workspace,
+                source_repository
+            ),
+            None
         );
     }
 

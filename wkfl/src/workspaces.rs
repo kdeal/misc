@@ -139,7 +139,7 @@ pub fn list(config: &Config, requested_repo: Option<&Path>) -> anyhow::Result<Ve
     Ok(results)
 }
 
-pub fn remove(config: &Config, relative: &Path) -> anyhow::Result<()> {
+pub fn remove(config: &Config, relative: &Path) -> anyhow::Result<PathBuf> {
     if relative.is_absolute()
         || relative
             .components()
@@ -156,6 +156,10 @@ pub fn remove(config: &Config, relative: &Path) -> anyhow::Result<()> {
     if !destination.join(".jj").exists() {
         bail!("workspace does not exist: {}", destination.display());
     }
+    let canonical_destination = destination
+        .canonicalize()
+        .context("workspace does not exist")?;
+    let source_repository = config.repositories_directory_path()?.join(repo_relative);
     let output = Command::new("jj")
         .arg("status")
         .current_dir(&destination)
@@ -170,7 +174,7 @@ pub fn remove(config: &Config, relative: &Path) -> anyhow::Result<()> {
     let output = Command::new("jj")
         .args(["workspace", "forget"])
         .arg(name)
-        .current_dir(config.repositories_directory_path()?.join(repo_relative))
+        .current_dir(source_repository)
         .output()
         .context("failed to execute 'jj workspace forget' - ensure jj is installed")?;
     if !output.status.success() {
@@ -180,7 +184,7 @@ pub fn remove(config: &Config, relative: &Path) -> anyhow::Result<()> {
         );
     }
     fs::remove_dir_all(destination)?;
-    Ok(())
+    Ok(canonical_destination)
 }
 
 #[cfg(test)]
