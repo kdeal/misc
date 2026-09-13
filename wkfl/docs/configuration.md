@@ -12,9 +12,19 @@ provided directly or via the secret resolution prefixes `env::MY_VAR`, `cmd::som
 # Default: "~/repos/"
 repositories_directory = "~/repos/"
 
+# Directory for Jujutsu workspaces. Default: "~/workspaces/"
+workspaces_directory = "~/workspaces/"
+
 # Optional path for personal notes. Defaults to "<repositories_directory>/notes" when omitted.
 notes_directory = "~/notes" 
 ```
+
+Workspaces created with `wkfl workspace create [namespace/repository] [--name workspace-name]` use the
+layout `<workspaces_directory>/<namespace>/<repository>/<workspace-name>/`. If the workspace name
+is omitted, wkfl generates a random adjective-noun name. If the repository argument is omitted,
+wkfl uses the repository containing the current directory. The same optional repository argument
+and inference apply to `wkfl workspace list`, which only lists workspaces belonging to the resolved
+repository.
 
 ### Chat provider selection
 

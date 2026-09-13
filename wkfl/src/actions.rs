@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use log::info;
 use serde::Serialize;
+use std::env;
 use std::fs;
 use std::io;
 use std::io::Read;
@@ -34,6 +35,7 @@ use crate::prompts::Link;
 use crate::repositories::get_repositories_in_directory;
 use crate::shell_actions::ShellAction;
 use crate::utils;
+use crate::workspaces;
 use crate::Context;
 
 #[derive(Serialize)]
@@ -46,6 +48,12 @@ struct RepositoriesOutput {
 struct CloneRepoOutput {
     name: String,
     directory: String,
+}
+
+#[derive(Serialize)]
+struct WorkspacesOutput {
+    base_directory: String,
+    workspaces: Vec<String>,
 }
 
 pub fn list_repositories(config: Config, full_path: bool, json: bool) -> anyhow::Result<()> {
@@ -79,6 +87,82 @@ pub fn list_repositories(config: Config, full_path: bool, json: bool) -> anyhow:
 
     Ok(())
 }
+
+pub fn create_workspace(
+    context: &mut Context,
+    requested_repo: Option<&Path>,
+    requested_name: Option<&str>,
+) -> anyhow::Result<()> {
+    let destination = workspaces::create(&context.config, requested_repo, requested_name)?;
+    println!("{}", destination.display());
+    context
+        .shell_actions
+        .push(ShellAction::Cd { path: destination });
+    Ok(())
+}
+
+pub fn list_workspaces(
+    config: &Config,
+    requested_repo: Option<&Path>,
+    full_path: bool,
+    json: bool,
+) -> anyhow::Result<()> {
+    let base = config.workspaces_directory_path()?;
+    let workspace_paths = workspaces::list(config, requested_repo)?;
+    let workspaces = workspace_paths
+        .into_iter()
+        .map(|path| {
+            if full_path {
+                Ok(path.display().to_string())
+            } else {
+                Ok(path.strip_prefix(&base)?.display().to_string())
+            }
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    if json {
+        return print_json(&WorkspacesOutput {
+            base_directory: base.display().to_string(),
+            workspaces,
+        });
+    }
+
+    for workspace in workspaces {
+        println!("{workspace}");
+    }
+    Ok(())
+}
+
+fn workspace_cd_destination(
+    current_dir: &Path,
+    removed_workspace: &Path,
+    source_repository: &Path,
+) -> Option<std::path::PathBuf> {
+    current_dir
+        .starts_with(removed_workspace)
+        .then(|| source_repository.to_owned())
+}
+
+pub fn remove_workspace(context: &mut Context, workspace: &Path) -> anyhow::Result<()> {
+    let current_dir = env::current_dir()?.canonicalize()?;
+    let removed_workspace = workspaces::remove(&context.config, workspace)?;
+    let repo_relative = workspace
+        .parent()
+        .ok_or_else(|| anyhow!("repository path is missing"))?;
+    let source_repository = context
+        .config
+        .repositories_directory_path()?
+        .join(repo_relative);
+    if let Some(source_repository) =
+        workspace_cd_destination(&current_dir, &removed_workspace, &source_repository)
+    {
+        context.shell_actions.push(ShellAction::Cd {
+            path: source_repository,
+        });
+    }
+    Ok(())
+}
+
 pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
     let base_repo_path = context.config.repositories_directory_path()?;
     let repo_paths = get_repositories_in_directory(&base_repo_path)?;
@@ -1693,6 +1777,33 @@ mod tests {
                 "name": "kdeal/misc",
                 "directory": "/repos/kdeal/misc",
             })
+        );
+    }
+
+    #[test]
+    fn selects_source_repository_when_removed_workspace_was_active() {
+        let workspace = std::path::Path::new("/workspaces/owner/repo/calm-otter");
+        let source_repository = std::path::Path::new("/repos/owner/repo");
+
+        assert_eq!(
+            super::workspace_cd_destination(workspace, workspace, source_repository),
+            Some(source_repository.to_owned())
+        );
+        assert_eq!(
+            super::workspace_cd_destination(
+                &workspace.join("src/module"),
+                workspace,
+                source_repository
+            ),
+            Some(source_repository.to_owned())
+        );
+        assert_eq!(
+            super::workspace_cd_destination(
+                std::path::Path::new("/workspaces/owner/repo/other"),
+                workspace,
+                source_repository
+            ),
+            None
         );
     }
 
