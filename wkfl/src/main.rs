@@ -42,10 +42,10 @@ enum Commands {
         #[command(subcommand)]
         command: Option<RepoCommands>,
     },
-    /// Create and manage Jujutsu workspaces.
+    /// Select or manage Jujutsu workspaces.
     Workspace {
         #[command(subcommand)]
-        command: WorkspaceCommands,
+        command: Option<WorkspaceCommands>,
     },
     /// Print the currently resolved wkfl configuration.
     Config,
@@ -159,6 +159,8 @@ enum RepoCommands {
 
 #[derive(Subcommand, Debug)]
 enum WorkspaceCommands {
+    /// Select a workspace and switch to it (prompts for a repository if outside one).
+    Cd,
     /// Create a workspace for a repository.
     Create {
         /// Repository path relative to the configured repositories directory.
@@ -587,7 +589,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             RepoCommands::Fmt { list } => actions::run_fmt_commands(&mut context, list)?,
             RepoCommands::Build { list } => actions::run_build_commands(&mut context, list)?,
         },
-        Commands::Workspace { command } => match command {
+        Commands::Workspace { command } => match command.unwrap_or(WorkspaceCommands::Cd) {
+            WorkspaceCommands::Cd => actions::switch_workspace(&mut context)?,
             WorkspaceCommands::Create { repo, name } => {
                 actions::create_workspace(&mut context, repo.as_deref(), name.as_deref())?
             }

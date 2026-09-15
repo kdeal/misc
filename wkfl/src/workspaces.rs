@@ -16,6 +16,34 @@ const NOUNS: &[&str] = &[
     "badger", "falcon", "forest", "harbor", "otter", "river", "sparrow", "summit", "willow", "wolf",
 ];
 
+pub fn current_repository(config: &Config, current_dir: &Path) -> anyhow::Result<Option<PathBuf>> {
+    if !current_dir
+        .ancestors()
+        .any(|path| path.join(".jj").exists())
+    {
+        return Ok(None);
+    }
+    Ok(Some(repository_from(config, None, current_dir)?.0))
+}
+
+pub fn navigation_choices(
+    config: &Config,
+    repo: &Path,
+    current_dir: &Path,
+) -> anyhow::Result<Vec<(String, PathBuf)>> {
+    let (base, _) = repository(config, Some(repo))?;
+    let current_dir = current_dir.canonicalize()?;
+    let mut choices = vec![("base".to_owned(), base)];
+    for workspace in list(config, Some(repo))? {
+        if !current_dir.starts_with(workspace.canonicalize()?) {
+            let name = workspace.file_name().context("workspace name is missing")?;
+            let name = name.to_string_lossy().into_owned();
+            choices.push((name, workspace));
+        }
+    }
+    Ok(choices)
+}
+
 fn repository(config: &Config, requested: Option<&Path>) -> anyhow::Result<(PathBuf, PathBuf)> {
     repository_from(config, requested, &env::current_dir()?)
 }
@@ -265,6 +293,53 @@ mod tests {
         let (resolved, relative) = repository_from(&config, None, &workspace_directory).unwrap();
         assert_eq!(resolved, repository.canonicalize().unwrap());
         assert_eq!(relative, Path::new("owner/repo"));
+    }
+
+    #[test]
+    fn navigation_includes_base_and_excludes_active_workspace_from_subdirectories() {
+        let root = tempdir().unwrap();
+        let config = config(root.path());
+        let repo = create_repository(&config, "owner/repo");
+        let parent = config
+            .workspaces_directory_path()
+            .unwrap()
+            .join("owner/repo");
+        let active = parent.join("calm-otter");
+        let other = parent.join("swift-wolf");
+        for path in [&active, &other] {
+            fs::create_dir_all(path.join(".jj")).unwrap();
+            fs::create_dir_all(path.join("src")).unwrap();
+        }
+        assert_eq!(
+            current_repository(&config, &active.join("src")).unwrap(),
+            Some(repo.canonicalize().unwrap())
+        );
+        assert_eq!(
+            navigation_choices(&config, &repo, &active.join("src")).unwrap(),
+            vec![
+                ("base".to_owned(), repo.canonicalize().unwrap()),
+                ("swift-wolf".to_owned(), other)
+            ]
+        );
+        assert_eq!(navigation_choices(&config, &repo, &repo).unwrap().len(), 3);
+    }
+
+    #[test]
+    fn navigation_outside_repository_and_without_workspaces() {
+        let root = tempdir().unwrap();
+        let config = config(root.path());
+        let repo = create_repository(&config, "owner/repo");
+        assert_eq!(current_repository(&config, root.path()).unwrap(), None);
+        let git_only = config
+            .repositories_directory_path()
+            .unwrap()
+            .join("owner/git-only");
+        fs::create_dir_all(git_only.join(".git")).unwrap();
+        assert_eq!(current_repository(&config, &git_only).unwrap(), None);
+        assert_eq!(
+            navigation_choices(&config, &repo, root.path()).unwrap(),
+            vec![("base".to_owned(), repo.canonicalize().unwrap())]
+        );
     }
 
     #[test]

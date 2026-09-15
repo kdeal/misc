@@ -26,6 +26,12 @@ wkfl uses the repository containing the current directory. The same optional rep
 and inference apply to `wkfl workspace list`, which only lists workspaces belonging to the resolved
 repository.
 
+Run `wkfl workspace cd` (or just `wkfl workspace`) to switch using the same fuzzy picker as
+`wkfl repo cd`. Inside a repository or workspace, wkfl uses that repository; outside a repository,
+it first prompts you to select one. The workspace picker includes the original repository as
+`base` and excludes the active workspace, including when run from a workspace subdirectory.
+Directory switching uses the same shell integration as `wkfl repo cd`.
+
 ### Chat provider selection
 
 ```toml
