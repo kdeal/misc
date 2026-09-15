@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{bail, Context};
+use std::os::unix::fs::symlink;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::Config;
@@ -137,7 +138,7 @@ pub fn create(
     let output = Command::new("jj")
         .args(["workspace", "add", "--name", &name])
         .arg(&destination)
-        .current_dir(repo)
+        .current_dir(&repo)
         .output()
         .context("failed to execute 'jj workspace add' - ensure jj is installed")?;
     if !output.status.success() {
@@ -146,6 +147,8 @@ pub fn create(
             String::from_utf8_lossy(&output.stderr).trim()
         );
     }
+    symlink(repo.join(".git"), destination.join(".git"))
+        .context("failed to create workspace .git symlink")?;
     Ok(destination)
 }
 
