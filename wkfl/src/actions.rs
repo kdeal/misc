@@ -164,7 +164,15 @@ pub fn remove_workspace(context: &mut Context, workspace: &Path) -> anyhow::Resu
 }
 
 pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
-    let base_repo_path = context.config.repositories_directory_path()?;
+    let repo_path = select_repo(&context.config)?;
+    context
+        .shell_actions
+        .push(ShellAction::Cd { path: repo_path });
+    Ok(())
+}
+
+fn select_repo(config: &Config) -> anyhow::Result<std::path::PathBuf> {
+    let base_repo_path = config.repositories_directory_path()?;
     let repo_paths = get_repositories_in_directory(&base_repo_path)?;
     let repo_paths_strs: Vec<String> = repo_paths
         .iter()
@@ -176,10 +184,25 @@ pub fn switch_repo(context: &mut Context) -> anyhow::Result<()> {
         })
         .collect();
     let repo_name = select_prompt("Repo:", &repo_paths_strs)?;
-    let repo_path = base_repo_path.join(repo_name);
-    context
-        .shell_actions
-        .push(ShellAction::Cd { path: repo_path });
+    Ok(base_repo_path.join(repo_name))
+}
+
+pub fn switch_workspace(context: &mut Context) -> anyhow::Result<()> {
+    let current_dir = env::current_dir()?.canonicalize()?;
+    let repo = match workspaces::current_repository(&context.config, &current_dir)? {
+        Some(repo) => repo,
+        None => select_repo(&context.config)?,
+    };
+    let choices = workspaces::navigation_choices(&context.config, &repo, &current_dir)?;
+    let names = choices
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    let selected = select_prompt("Workspace:", &names)?;
+    let index = names.iter().position(|name| name == selected).unwrap();
+    context.shell_actions.push(ShellAction::Cd {
+        path: choices[index].1.clone(),
+    });
     Ok(())
 }
 
