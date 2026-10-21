@@ -18,6 +18,10 @@ cover_height = 10;
 cover_cap_height = 5;
 cover_cap_overlap = 6; // Total added diameter (3mm per side)
 cover_cap_edge_radius = 0.8;
+cover_cap_taper_height = cover_cap_overlap / 2; // 3mm rise for a 45-degree underside
+
+assert(cover_cap_taper_height <= cover_height,
+       "The cap taper must fit within the body height.");
 
 module dome_cap() {
   cap_radius = (cover_diameter + cover_cap_overlap) / 2;
@@ -40,6 +44,11 @@ module dome_cap() {
 difference() {
   union() {
    cylinder(h=cover_height, d=cover_diameter);
+   // Support the dome's overhang without changing its shape or total height.
+   // Each layer expands at 45 degrees instead of starting with a flat ledge.
+   translate([0,0, cover_height - cover_cap_taper_height])
+     cylinder(h=cover_cap_taper_height,
+              d1=cover_diameter, d2=cover_diameter + cover_cap_overlap);
    translate([0,0, cover_height])
      dome_cap();
   }
