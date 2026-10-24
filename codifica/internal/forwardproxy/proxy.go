@@ -4,6 +4,7 @@ package forwardproxy
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -17,21 +18,27 @@ import (
 // Proxy allows hostname destinations, including names resolving to private IPs.
 // It provides no authentication and must not be exposed to untrusted clients.
 type Proxy struct {
-	transport *http.Transport
-	forward   *httputil.ReverseProxy
-	ctx       context.Context
-	cancel    context.CancelFunc
-	mu        sync.Mutex
-	closed    bool
-	tunnels   map[net.Conn]net.Conn
+	evaluateAllowList bool
+	allowList         map[string]struct{}
+	transport         *http.Transport
+	forward           *httputil.ReverseProxy
+	ctx               context.Context
+	cancel            context.CancelFunc
+	mu                sync.Mutex
+	closed            bool
+	tunnels           map[net.Conn]net.Conn
 }
 
 func New() *Proxy {
+	return newProxy(nil)
+}
+
+func newProxy(allowList map[string]struct{}) *Proxy {
 	ctx, cancel := context.WithCancel(context.Background())
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	// Dial destinations directly, ignoring environment proxy settings.
 	transport.Proxy = nil
-	p := &Proxy{transport: transport, ctx: ctx, cancel: cancel, tunnels: make(map[net.Conn]net.Conn)}
+	p := &Proxy{allowList: allowList, transport: transport, ctx: ctx, cancel: cancel, tunnels: make(map[net.Conn]net.Conn)}
 	p.forward = &httputil.ReverseProxy{
 		Transport: transport,
 		Rewrite: func(r *httputil.ProxyRequest) {
@@ -74,8 +81,8 @@ func (p *Proxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	host := r.URL.Hostname()
+	port := r.URL.Port()
 	if r.Method == http.MethodConnect {
-		var port string
 		var err error
 		host, port, err = net.SplitHostPort(r.Host)
 		if err != nil || !validPort(port) {
@@ -85,6 +92,20 @@ func (p *Proxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if r.URL.Scheme != "http" || r.URL.Host == "" || r.URL.User != nil || (r.URL.Port() != "" && !validPort(r.URL.Port())) {
 		http.Error(w, "expected an absolute HTTP URL", http.StatusBadRequest)
 		return
+	}
+	if port == "" {
+		port = "80"
+	}
+	if p.allowList != nil {
+		if !p.allowsDestination(host, port) {
+			slog.WarnContext(r.Context(), "destination is not in the allow list",
+				"host", host, "port", port, "method", r.Method, "client", r.RemoteAddr,
+				"evaluate", p.evaluateAllowList)
+			if !p.evaluateAllowList {
+				http.Error(w, "destination is not in the allow list", http.StatusForbidden)
+				return
+			}
+		}
 	}
 	if !allowedHost(host) {
 		http.Error(w, "only hostname destinations are allowed", http.StatusForbidden)
