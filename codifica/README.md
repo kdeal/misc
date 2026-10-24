@@ -65,7 +65,11 @@ timeouts, without header-read or whole-request deadlines.
 
 ## Check
 
+Run the same formatting, vet, and race-enabled tests as Buildkite CI:
+
 ```sh
-go test -race ./...
-go vet ./...
+just ci
 ```
+
+CI uses the shared development image and runs when `codifica/` or the Buildkite
+pipeline changes. Go 1.26.5 or newer and `just` are required.

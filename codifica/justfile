@@ -1,0 +1,16 @@
+ci: lint test
+
+lint:
+    #!/bin/sh
+    set -eu
+
+    unformatted=$(gofmt -l .)
+    if [ -n "$unformatted" ]; then
+        printf 'Go files need formatting:\n%s\n' "$unformatted" >&2
+        exit 1
+    fi
+
+    go vet ./...
+
+test:
+    go test -race ./...

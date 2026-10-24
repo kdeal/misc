@@ -1,4 +1,15 @@
 steps:
+  - label: ":golang: Codifica CI"
+    key: "codifica_go"
+    command: |
+      cd codifica
+      just ci
+    if_changed: "{codifica/**,.buildkite/pipeline.yaml}"
+    plugins:
+      - docker#v5.13.0:
+          image: "ghcr.io/kdeal/devenv-ci"
+          propagate-uid-gid: true
+
   - label: ":bricks: :white_check_mark: Linters for models project"
     key: "models_lint"
     command: |
