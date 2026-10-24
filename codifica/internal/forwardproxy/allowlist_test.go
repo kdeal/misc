@@ -91,11 +91,23 @@ func TestAllowListEvaluationAndLogging(t *testing.T) {
 					t.Errorf("missing request details: %s", logs.String())
 				}
 			}
-			// Evaluation never bypasses the existing IP-literal restriction.
-			w := httptest.NewRecorder()
-			p.Handler().ServeHTTP(w, httptest.NewRequest("GET", "http://127.0.0.1/", nil))
-			if w.Code != http.StatusForbidden {
-				t.Errorf("IP literal: got %d", w.Code)
+			// Invalid hosts are rejected before allow-list evaluation in either mode.
+			for _, host := range []string{"127.0.0.1", "[::1]", "bad..test"} {
+				for _, method := range []string{http.MethodGet, http.MethodConnect} {
+					logs.Reset()
+					requestTarget := "http://" + host + "/"
+					if method == http.MethodConnect {
+						requestTarget = host + ":443"
+					}
+					w := httptest.NewRecorder()
+					p.Handler().ServeHTTP(w, httptest.NewRequest(method, requestTarget, nil))
+					if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "only hostname destinations are allowed") {
+						t.Errorf("%s %s: expected hostname rejection, got %d %s", method, host, w.Code, w.Body.String())
+					}
+					if logs.Len() != 0 {
+						t.Errorf("%s %s: unexpected allow-list log: %s", method, host, logs.String())
+					}
+				}
 			}
 		})
 	}

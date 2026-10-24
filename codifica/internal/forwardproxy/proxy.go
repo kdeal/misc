@@ -93,6 +93,10 @@ func (p *Proxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "expected an absolute HTTP URL", http.StatusBadRequest)
 		return
 	}
+	if !allowedHost(host) {
+		http.Error(w, "only hostname destinations are allowed", http.StatusForbidden)
+		return
+	}
 	if port == "" {
 		port = "80"
 	}
@@ -106,10 +110,6 @@ func (p *Proxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-	}
-	if !allowedHost(host) {
-		http.Error(w, "only hostname destinations are allowed", http.StatusForbidden)
-		return
 	}
 	ctx, cancel := context.WithCancel(r.Context())
 	stop := context.AfterFunc(p.ctx, cancel)

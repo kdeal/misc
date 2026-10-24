@@ -35,7 +35,9 @@ invalid entries. An unreadable or invalid file prevents startup; an empty file
 denies all destinations. Requests to unlisted hosts receive 403. Without the flag,
 all valid hostname destinations remain allowed.
 
-Every allow-list miss is logged at warning level with the destination hostname,
+Hostname validation runs before allow-list evaluation. Invalid hostnames and IP
+literals are rejected without producing allow-list miss logs.
+Every allow-list miss for a valid hostname is logged at warning level with the destination hostname,
 port, request method, client address, and evaluation mode, whether or not it is blocked.
 To evaluate a list without enforcing it, run:
 
