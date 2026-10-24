@@ -31,6 +31,17 @@ IP addresses are rejected. Hostnames resolving to private or loopback addresses
 are allowed. There is no authentication: keep the listeners private. Shutdown
 closes active tunnels as well as ordinary HTTP connections.
 
+To restrict destinations, pass `-allow-list ./allowed-hosts.txt` with one
+`hostname:ports` entry per line. Use `example.com:80,443` for selected ports or
+`example.com:*` to explicitly allow all ports. Bare hostnames are invalid.
+HTTP URLs default to port 80. The list
+applies to HTTP and CONNECT; unlisted destinations receive
+403. Every allow-list miss is logged. Add `-evaluate` to log misses without
+blocking unlisted hostnames. An empty file denies all destinations in enforcement
+mode, and an invalid or unreadable file prevents startup in either mode.
+Without the allow-list flag, all valid hostnames remain allowed. See the
+[forward proxy documentation](internal/forwardproxy/README.md) for file syntax.
+
 ## Layout
 
 ```text
