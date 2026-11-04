@@ -61,7 +61,10 @@ func TestHTTPForwarding(t *testing.T) {
 		_, _ = w.Write(body)
 	}))
 	defer upstream.Close()
-	p := New()
+	p, err := NewWithAllowListFile(allowListFile(t, "LOCALHOST.:*\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer p.Close()
 	server := httptest.NewServer(p.Handler())
 	defer server.Close()
@@ -213,7 +216,10 @@ func TestHTTPSConnect(t *testing.T) {
 		_, _ = io.WriteString(w, "secure response")
 	}))
 	defer upstream.Close()
-	p := New()
+	p, err := NewWithAllowListFile(allowListFile(t, "LOCALHOST.:*\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer p.Close()
 	server := httptest.NewServer(p.Handler())
 	defer server.Close()
