@@ -6,14 +6,14 @@
 
 part_length = 200;
 
-plywood_thickness = 12.7;  // 1/2 in
+plywood_thickness = 19.05;  // 1/2 in
 board_gap = 3.175;         // 1/8 in
 fit_clearance = 0.35;
 
 wall_thickness = 3;
 capture_depth = 20;
 rest_depth = 20;
-edge_taper = 4;
+edge_taper = 8;
 
 // The lower rail sits directly under both panels. The upper rail provides the
 // clearance needed to slide the clamp over the fixed plywood panel.
