@@ -2,8 +2,9 @@
 
 A Go service scaffold for an HTML website, a forward HTTP proxy with a separate
 admin listener, and reverse proxies for services such as GitHub, OpenAI, npm,
-and Cargo. The website and forward proxy have separate binaries; service-specific
-reverse proxies are planned. Uses the standard library.
+and Cargo. The website, forward proxy, and ChatGPT subscription proxy have
+separate binaries; other service-specific reverse proxies are planned. Uses the
+standard library.
 
 ## Run
 
@@ -42,11 +43,27 @@ mode, and an invalid or unreadable file prevents startup in either mode.
 Without the allow-list flag, all valid hostnames remain allowed. See the
 [forward proxy documentation](internal/forwardproxy/README.md) for file syntax.
 
+## ChatGPT subscription sign-in
+
+```sh
+go run ./cmd/openaiproxy login   # Open the printed browser URL
+go run ./cmd/openaiproxy serve   # Local Responses API on 127.0.0.1:8083
+```
+
+The subscription proxy supports Linux only. Defaults to `openai-codex` (ChatGPT's Codex backend). Use `-provider openai` on
+both commands for the direct subscription flow. Credentials are stored privately
+in `$XDG_CONFIG_HOME/codifica/auth.json` (default `~/.config/codifica/auth.json`)
+and refreshed automatically. This listener has no
+client authentication: keep it private. See the [subscription proxy guide](internal/chatgpt/README.md)
+for a sample model request, endpoint differences, pasted-URL login, and limitations.
+
 ## Layout
 
 ```text
 cmd/web/               Website executable; composition, signals, and startup
 cmd/forwardproxy/      Forward proxy and private admin executable
+cmd/openaiproxy/       ChatGPT subscription login and local Responses proxy
+internal/chatgpt/     OAuth credentials, refresh, and Responses forwarding
 internal/httpserver/   Shared server defaults and multi-listener lifecycle
 internal/web/          HTML routes and embedded templates
 internal/forwardproxy/ HTTP forwarding, CONNECT tunnels, and admin health handler
@@ -60,8 +77,8 @@ separate listeners within the same forward-proxy binary, sharing proxy state.
 Servers start independently using `ListenAndServe`. A server failure shuts down
 the other servers rather than leaving a partially running service.
 
-Add separate commands such as `cmd/githubproxy`, `cmd/openaiproxy`, `cmd/npmproxy`,
-and `cmd/cargoproxy` as those services are implemented. These entry points are not
+Add separate commands such as `cmd/githubproxy`, `cmd/npmproxy`, and
+`cmd/cargoproxy` as those services are implemented. These entry points are not
 created yet. Build each independently, for example:
 
 ```sh

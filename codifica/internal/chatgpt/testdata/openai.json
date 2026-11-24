@@ -1,0 +1,27 @@
+{
+  "authorize_url": "https://auth.openai.com/api/accounts/authorize",
+  "token_url": "https://auth.openai.com/api/accounts/oauth/token",
+  "authorization": {
+    "client_id": ["dynamic_agent_client"],
+    "agent_name_hint": ["Codifica"],
+    "ext_agent_host_id": ["stable-host-id"],
+    "response_type": ["code"],
+    "redirect_uri": ["http://127.0.0.1:1455/auth/callback"],
+    "resource": ["https://api.openai.com/v1"],
+    "scope": ["openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"],
+    "code_challenge_method": ["S256"]
+  },
+  "exchange": {
+    "grant_type": ["authorization_code"],
+    "client_id": ["issued-client"],
+    "code": ["auth-code"],
+    "redirect_uri": ["http://127.0.0.1:1455/auth/callback"],
+    "resource": ["https://api.openai.com/v1"]
+  },
+  "refresh": {
+    "grant_type": ["refresh_token"],
+    "client_id": ["issued-client"],
+    "refresh_token": ["first-refresh"],
+    "resource": ["https://api.openai.com/v1"]
+  }
+}
