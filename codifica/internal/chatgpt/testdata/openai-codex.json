@@ -1,0 +1,24 @@
+{
+  "authorize_url": "https://auth.openai.com/oauth/authorize",
+  "token_url": "https://auth.openai.com/oauth/token",
+  "authorization": {
+    "client_id": ["app_EMoamEEZ73f0CkXaXp7hrann"],
+    "response_type": ["code"],
+    "redirect_uri": ["http://127.0.0.1:1455/auth/callback"],
+    "scope": ["openid profile email offline_access"],
+    "code_challenge_method": ["S256"],
+    "id_token_add_organizations": ["true"],
+    "codex_cli_simplified_flow": ["true"]
+  },
+  "exchange": {
+    "grant_type": ["authorization_code"],
+    "client_id": ["app_EMoamEEZ73f0CkXaXp7hrann"],
+    "code": ["auth-code"],
+    "redirect_uri": ["http://127.0.0.1:1455/auth/callback"]
+  },
+  "refresh": {
+    "grant_type": ["refresh_token"],
+    "client_id": ["app_EMoamEEZ73f0CkXaXp7hrann"],
+    "refresh_token": ["first-refresh"]
+  }
+}
